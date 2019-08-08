@@ -1,0 +1,9 @@
+storage = ""
+
+[log]
+level = "info"
+formatter = "text"
+
+[http]
+debug = false
+addr = ":8889"

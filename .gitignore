@@ -1,0 +1,6 @@
+/dist
+/config.local.yml
+/config.local.toml
+.imdone
+/sake
+/sandbox
