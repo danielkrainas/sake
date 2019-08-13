@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/danielkrainas/sake/pkg/service"
+	"github.com/danielkrainas/sake/pkg/service/protobuf"
 )
 
 func init() {
@@ -24,7 +25,7 @@ var runCmd = &cobra.Command{
 			return
 		}*/
 
-		hub := service.NewTestHub()
+		hub := service.NewDebugHub()
 		coordinator := service.NewCoordinator(rootContext, hub)
 
 		coordinator.Register(service.Workflows[1])
@@ -33,22 +34,21 @@ var runCmd = &cobra.Command{
 		wg := registerTestListeners(hub, simulateFailure)
 
 		// kick off saga
-		hub.Publish("init-start", &service.Envelope{})
+		hub.PubRaw("init-start", []byte{})
 
 		wg.Wait()
 	},
 }
 
-func registerTestListeners(hub service.HubConnector, simulateFailure bool) *sync.WaitGroup {
-	hub.Subscribe("start", func(e *service.Envelope) {
+func registerTestListeners(hub *service.DebugHub, simulateFailure bool) *sync.WaitGroup {
+	hub.SubReq("start", func(req *protocol.Request) {
 		fmt.Println("coordinator called start")
 		fmt.Println("replying success")
-		ne := &service.Envelope{
-			TransactionID: e.TransactionID,
-			Data:          []byte("started"),
+		reply := &protocol.Reply{
+			NewData: []byte("started"),
 		}
 
-		go hub.Publish(e.SuccessReplyAddress, ne)
+		go hub.PubReply(req.SuccessReplyTopic, reply)
 	})
 
 	wg := sync.WaitGroup{}
@@ -57,27 +57,27 @@ func registerTestListeners(hub service.HubConnector, simulateFailure bool) *sync
 		wg.Add(2)
 	}
 
-	hub.Subscribe("cancel-start", func(e *service.Envelope) {
+	hub.SubReq("cancel-start", func(req *protocol.Request) {
 		fmt.Println("coordinator rollback start")
 		fmt.Println("replying success")
 
 		go func() {
-			hub.Publish(e.SuccessReplyAddress, e)
+			hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 			wg.Done()
 		}()
 	})
 
-	hub.Subscribe("middle", func(e *service.Envelope) {
+	hub.SubReq("middle", func(req *protocol.Request) {
 		fmt.Println("coordinator called middle")
 		fmt.Println("replying success")
 
 		go func() {
 			wg.Done()
-			hub.Publish(e.SuccessReplyAddress, e)
+			hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 		}()
 	})
 
-	hub.Subscribe("end", func(e *service.Envelope) {
+	hub.SubReq("end", func(req *protocol.Request) {
 		fmt.Println("coordinator called end")
 		if simulateFailure {
 			fmt.Println("replying failed, should rollback")
@@ -88,20 +88,20 @@ func registerTestListeners(hub service.HubConnector, simulateFailure bool) *sync
 		go func() {
 			wg.Done()
 			if simulateFailure {
-				hub.Publish(e.FailureReplyAddress, e)
+				hub.PubReply(req.FailureReplyTopic, &protocol.Reply{})
 			} else {
-				hub.Publish(e.SuccessReplyAddress, e)
+				hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 			}
 		}()
 	})
 
-	hub.Subscribe("cancel-middle", func(e *service.Envelope) {
+	hub.SubReq("cancel-middle", func(req *protocol.Request) {
 		fmt.Println("coordinator rollback middle")
 		fmt.Println("replying success")
 
 		go func() {
 			wg.Done()
-			hub.Publish(e.SuccessReplyAddress, e)
+			hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 		}()
 	})
 

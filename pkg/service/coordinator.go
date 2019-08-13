@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/danielkrainas/gobag/util/token"
+	"github.com/danielkrainas/sake/pkg/service/protobuf"
 )
 
 type APIServer interface {
@@ -38,7 +41,7 @@ func (c *Coordinator) Register(wf *Workflow) {
 	c.wfMutex.Lock()
 	defer c.wfMutex.Unlock()
 	c.workflows[wf.Name] = wf
-	c.Hub.Subscribe(wf.TriggeredBy, c.createWorkflowTriggerHandler(wf))
+	c.Hub.Sub(wf.TriggeredBy, c.createWorkflowTriggerHandler(wf))
 }
 
 func (c *Coordinator) UpdateExpired() error {
@@ -59,9 +62,9 @@ func (c *Coordinator) UpdateExpired() error {
 	return nil
 }
 
-func (c *Coordinator) createWorkflowTriggerHandler(wf *Workflow) func(e *Envelope) {
-	return func(e *Envelope) {
-		trx := NewTransaction(wf, []byte("unmodified"))
+func (c *Coordinator) createWorkflowTriggerHandler(wf *Workflow) func([]byte) {
+	return func(data []byte) {
+		trx := NewTransaction(wf, nil)
 		c.trxMutex.Lock()
 		defer c.trxMutex.Unlock()
 		c.transactions[trx.ID] = trx
@@ -69,25 +72,26 @@ func (c *Coordinator) createWorkflowTriggerHandler(wf *Workflow) func(e *Envelop
 	}
 }
 
-func (c *Coordinator) handleTransactionSuccessReply(e *Envelope) {
-	trx, err := c.findTransaction(e.TransactionID)
-	trx.Lock()
-	defer trx.Unlock()
-	trx.Data = e.Data
-	trx.Commit(true)
-	err = c.transition(trx)
-	if err != nil {
+func (c *Coordinator) createTransactionSuccessHandler(trx *Transaction) func(*protocol.Reply) {
+	return func(reply *protocol.Reply) {
+		trx.Lock()
+		defer trx.Unlock()
+		trx.Data = reply.NewData
+		trx.Commit(true)
+		if err := c.transition(trx); err != nil {
+			//
+		}
 	}
 }
 
-func (c *Coordinator) handleTransactionFailureReply(e *Envelope) {
-	trx, err := c.findTransaction(e.TransactionID)
-	trx.Lock()
-	defer trx.Unlock()
-	trx.Commit(false)
-	err = c.transition(trx)
-	if err != nil {
-
+func (c *Coordinator) createTransactionFailureHandler(trx *Transaction) func(*protocol.Reply) {
+	return func(reply *protocol.Reply) {
+		trx.Lock()
+		defer trx.Unlock()
+		trx.Commit(false)
+		if err := c.transition(trx); err != nil {
+			//
+		}
 	}
 }
 
@@ -118,20 +122,21 @@ func (c *Coordinator) transition(trx *Transaction) error {
 	c.Hub.CancelGroup(trx)
 	fmt.Printf("#%s state=%s\n", trx.ID, trx.State)
 	if !trx.IsCompleted() {
-		fmt.Printf("#%s activity=%s\n", trx.ID, trx.StageAddress)
-		successAddress := successReplyAddress(trx)
-		failureAddress := failureReplyAddress(trx)
-		c.Hub.GroupSubscribe(trx, successAddress, c.handleTransactionSuccessReply)
-		c.Hub.GroupSubscribe(trx, failureAddress, c.handleTransactionFailureReply)
+		fmt.Printf("#%s activity=%s\n", trx.ID, trx.StageTopic)
+		successTopic := successReplyAddress(trx)
+		failureTopic := failureReplyAddress(trx)
+		c.Hub.SubReply(trx, successTopic, c.createTransactionSuccessHandler(trx))
+		c.Hub.SubReply(trx, failureTopic, c.createTransactionFailureHandler(trx))
 
-		e := &Envelope{
-			TransactionID:       trx.ID,
-			SuccessReplyAddress: successAddress,
-			FailureReplyAddress: failureAddress,
-			Data:                trx.Data,
+		req := &protocol.Request{
+			ID:                token.Generate(),
+			TransactionID:     trx.ID,
+			SuccessReplyTopic: successTopic,
+			FailureReplyTopic: failureTopic,
+			Data:              trx.Data,
 		}
 
-		c.Hub.Publish(trx.StageAddress, e)
+		c.Hub.Pub(trx.StageTopic, req)
 	} else {
 		fmt.Printf("#%s completed with state=%s\n", trx.ID, trx.State)
 		c.unload(trx)
@@ -141,9 +146,9 @@ func (c *Coordinator) transition(trx *Transaction) error {
 }
 
 func successReplyAddress(trx *Transaction) string {
-	return fmt.Sprintf("success/%s@%s", trx.ID, trx.StageAddress)
+	return fmt.Sprintf("success/%s@%s", trx.ID, trx.StageTopic)
 }
 
 func failureReplyAddress(trx *Transaction) string {
-	return fmt.Sprintf("failed/%s@%s", trx.ID, trx.StageAddress)
+	return fmt.Sprintf("failed/%s@%s", trx.ID, trx.StageTopic)
 }

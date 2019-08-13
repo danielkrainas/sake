@@ -14,6 +14,12 @@
   version = "v6.0.0"
 
 [[projects]]
+  name = "github.com/cskr/pubsub"
+  packages = ["."]
+  revision = "65166f5ae403cbf6dcdced31e1f8f8ad95485cb3"
+  version = "v1.0.2"
+
+[[projects]]
   branch = "master"
   name = "github.com/danielkrainas/gobag"
   packages = ["api/describe","context","errcode","log","util/token","util/uid"]
@@ -24,6 +30,12 @@
   packages = ["."]
   revision = "51d6538a90f86fe93ac480b35f37b2be17fef232"
   version = "v2.2.2"
+
+[[projects]]
+  name = "github.com/golang/protobuf"
+  packages = ["proto"]
+  revision = "6c65a5562fc06764971b7c5d05c76c75e84bdbf7"
+  version = "v1.3.2"
 
 [[projects]]
   name = "github.com/google/wire"
@@ -94,6 +106,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "c9e847e1cf8c00a1d10dfab3c51650acad1fbe970926e4c61b7b9db47a1a3003"
+  inputs-digest = "f7973588ba3938c044f98997bf9755ff509b7d0b45e531df06a86b2f04783fd9"
   solver-name = "gps-cdcl"
   solver-version = 1

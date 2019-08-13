@@ -1,0 +1,7 @@
+syntax="proto3";
+
+package protocol;
+
+message Reply {
+  bytes NewData = 1;
+}

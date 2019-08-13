@@ -8,13 +8,6 @@ import (
 	"github.com/danielkrainas/gobag/util/token"
 )
 
-type Envelope struct {
-	TransactionID       string
-	SuccessReplyAddress string
-	FailureReplyAddress string
-	Data                []byte
-}
-
 type Stage struct {
 	Next            string
 	Rollback        string
@@ -45,10 +38,10 @@ type Transaction struct {
 	ID           string
 	State        TransactionState
 	Data         []byte
-	StageKey     string
-	StageAddress string
-	StageStarted time.Time
 	Stage        *Stage
+	StageKey     string
+	StageTopic   string
+	StageStarted time.Time
 	Started      time.Time
 	Expires      *time.Time
 	Workflow     *Workflow
@@ -60,10 +53,10 @@ func NewTransaction(wf *Workflow, data []byte) *Transaction {
 		ID:           token.Generate(),
 		State:        IsInitializing,
 		Data:         data,
-		StageKey:     "",
-		StageAddress: "",
-		StageStarted: time.Unix(0, 0),
 		Stage:        nil,
+		StageKey:     "",
+		StageTopic:   "",
+		StageStarted: time.Unix(0, 0),
 		Started:      time.Now(),
 		Expires:      nil,
 		Workflow:     wf,
@@ -111,7 +104,7 @@ func (trx *Transaction) Step() {
 		stage := trx.Workflow.Stages[stageKey]
 		trx.StageKey = stageKey
 		trx.Stage = stage
-		trx.StageAddress = stageKey
+		trx.StageTopic = stageKey
 		trx.StageStarted = time.Now()
 		if stage != nil {
 			if trx.State == IsReverting && stage.Rollback == "" {
@@ -119,7 +112,7 @@ func (trx *Transaction) Step() {
 				return
 			} else {
 				if trx.State == IsReverting {
-					trx.StageAddress = stage.Rollback
+					trx.StageTopic = stage.Rollback
 				}
 
 				trx.SetTimeout(stage.Timeout)

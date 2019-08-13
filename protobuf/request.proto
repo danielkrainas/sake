@@ -1,0 +1,11 @@
+syntax="proto3";
+
+package protocol;
+
+message Request {
+  string ID = 1;
+  string TransactionID = 2;
+  string SuccessReplyTopic = 3;
+  string FailureReplyTopic = 4;
+  bytes Data = 5;
+}

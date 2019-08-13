@@ -27,6 +27,9 @@ clean:
 	go clean ./pkg/...
 	rm -rf dist
 
+protogen:
+	protoc --go_out=./pkg/service ./protobuf/*.proto
+
 gen:
 	wire ./pkg/...
 
