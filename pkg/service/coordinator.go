@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/danielkrainas/gobag/util/token"
 	"github.com/danielkrainas/sake/pkg/service/protobuf"
@@ -15,60 +13,96 @@ type APIServer interface {
 }
 
 type CoordinatorService interface {
-	Register(wf *Workflow)
+	Register(wf *Workflow) error
 	UpdateExpired() error
 }
 
 type Coordinator struct {
-	Hub          HubConnector
-	Context      context.Context
-	transactions map[string]*Transaction
-	trxMutex     sync.Mutex
-	wfMutex      sync.Mutex
-	workflows    map[string]*Workflow
+	Hub     HubConnector
+	Context context.Context
+	Cache   CacheService
 }
 
-func NewCoordinator(ctx context.Context, hub HubConnector) *Coordinator {
-	return &Coordinator{
-		Hub:          hub,
-		Context:      ctx,
-		transactions: make(map[string]*Transaction),
-		workflows:    make(map[string]*Workflow),
+var _ CoordinatorService = &Coordinator{}
+
+func NewCoordinator(ctx context.Context, hub HubConnector, cache CacheService, storage StorageService) *Coordinator {
+	c := &Coordinator{
+		Hub:     hub,
+		Context: ctx,
+		Cache:   cache,
 	}
+
+	workflows, err := storage.LoadAllWorkflows(ctx)
+	if err != nil {
+		//
+	}
+
+	for _, wf := range workflows {
+		if err := c.Register(wf); err != nil {
+			//
+		}
+	}
+
+	activeTransactions, err := storage.LoadActiveTransactions(ctx)
+	if err != nil {
+		//
+	}
+
+	for _, trx := range activeTransactions {
+		if err := c.load(trx); err != nil {
+			//
+		}
+	}
+
+	return c
 }
 
-func (c *Coordinator) Register(wf *Workflow) {
-	c.wfMutex.Lock()
-	defer c.wfMutex.Unlock()
-	c.workflows[wf.Name] = wf
+func (c *Coordinator) Register(wf *Workflow) error {
+	if wf, err := c.Cache.GetWorkflow(c.Context, wf.Name); err != nil {
+		//
+	} else if wf != nil {
+		//
+	}
+
+	if err := c.Cache.PutWorkflow(c.Context, wf); err != nil {
+		//
+	}
+
 	c.Hub.Sub(wf.TriggeredBy, c.createWorkflowTriggerHandler(wf))
+	return nil
 }
 
 func (c *Coordinator) UpdateExpired() error {
-	c.trxMutex.Lock()
-	defer c.trxMutex.Unlock()
-	for _, trx := range c.transactions {
-		func(trx *Transaction) {
-			trx.Lock()
-			defer trx.Unlock()
+	return c.Cache.TransactAll(c.Context, func(trx *Transaction) (*Transaction, error) {
+		trx.Lock()
+		defer trx.Unlock()
 
-			if trx.IsExpired() && trx.State == IsExecuting {
-				trx.Commit(false)
-				c.transition(trx)
+		if trx.IsExpired() && trx.State == IsExecuting {
+			if err := trx.Commit(false); err != nil {
+				//
 			}
-		}(trx)
-	}
 
-	return nil
+			if err := c.transition(trx); err != nil {
+				//
+			}
+		}
+
+		return trx, nil
+	})
 }
 
 func (c *Coordinator) createWorkflowTriggerHandler(wf *Workflow) func([]byte) {
 	return func(data []byte) {
 		trx := NewTransaction(wf, nil)
-		c.trxMutex.Lock()
-		defer c.trxMutex.Unlock()
-		c.transactions[trx.ID] = trx
-		c.transition(trx)
+		trx.Lock()
+		defer trx.Unlock()
+		if err := c.Cache.PutTransaction(c.Context, trx); err != nil {
+			//
+		}
+
+		if err := c.transition(trx); err != nil {
+			//
+		}
 	}
 }
 
@@ -76,8 +110,15 @@ func (c *Coordinator) createTransactionSuccessHandler(trx *Transaction) func(*pr
 	return func(reply *protocol.Reply) {
 		trx.Lock()
 		defer trx.Unlock()
-		trx.Data = reply.NewData
-		trx.Commit(true)
+		if reply.NewData != nil {
+			// log
+			trx.Data = reply.NewData
+		}
+
+		if err := trx.Commit(true); err != nil {
+			//
+		}
+
 		if err := c.transition(trx); err != nil {
 			//
 		}
@@ -88,38 +129,38 @@ func (c *Coordinator) createTransactionFailureHandler(trx *Transaction) func(*pr
 	return func(reply *protocol.Reply) {
 		trx.Lock()
 		defer trx.Unlock()
-		trx.Commit(false)
+		if err := trx.Commit(false); err != nil {
+			//
+		}
+
 		if err := c.transition(trx); err != nil {
 			//
 		}
 	}
 }
 
-func (c *Coordinator) unload(trx *Transaction) {
-	c.trxMutex.Lock()
-	defer c.trxMutex.Unlock()
-	delete(c.transactions, trx.ID)
+func (c *Coordinator) load(trx *Transaction) error {
+	trx.Lock()
+	defer trx.Unlock()
+	return c.transition(trx)
 }
 
-func (c *Coordinator) recordState(trx *Transaction) {
-	// noop
-}
-
-func (c *Coordinator) findTransaction(id string) (*Transaction, error) {
-	c.trxMutex.Lock()
-	defer c.trxMutex.Unlock()
-	trx, ok := c.transactions[id]
-	if !ok {
-		return nil, errors.New("transaction not found")
-	}
-
-	return trx, nil
+func (c *Coordinator) unload(trx *Transaction) error {
+	return c.Cache.RemoveTransaction(c.Context, trx)
 }
 
 func (c *Coordinator) transition(trx *Transaction) error {
-	c.recordState(trx)
+	if err := c.Cache.PutTransaction(c.Context, trx); err != nil {
+		// log
+		return err
+	}
+
 	trx.Step()
-	c.Hub.CancelGroup(trx)
+	if err := c.Hub.CancelGroup(trx); err != nil {
+		//
+		return err
+	}
+
 	fmt.Printf("#%s state=%s\n", trx.ID, trx.State)
 	if !trx.IsCompleted() {
 		fmt.Printf("#%s activity=%s\n", trx.ID, trx.StageTopic)
@@ -139,7 +180,9 @@ func (c *Coordinator) transition(trx *Transaction) error {
 		c.Hub.Pub(trx.StageTopic, req)
 	} else {
 		fmt.Printf("#%s completed with state=%s\n", trx.ID, trx.State)
-		c.unload(trx)
+		if err := c.unload(trx); err != nil {
+			return err
+		}
 	}
 
 	return nil

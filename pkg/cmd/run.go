@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/spf13/cobra"
@@ -25,18 +26,41 @@ var runCmd = &cobra.Command{
 			return
 		}*/
 
+		storage, err := service.NewDebugStorage(nil, nil)
+		if err != nil {
+			log.Fatal(rootContext, err)
+		}
+
+		var cache service.CacheService
+
+		cache, err = service.NewInMemoryCache()
+		if err != nil {
+			log.Fatal(rootContext, err)
+		}
+
+		cache = &service.WriteThruCache{
+			CacheService: cache,
+			Storage:      storage,
+		}
+
 		hub := service.NewDebugHub()
-		coordinator := service.NewCoordinator(rootContext, hub)
+		coordinator := service.NewCoordinator(rootContext, hub, cache, storage)
 
 		coordinator.Register(service.Workflows[1])
 
-		simulateFailure := true
+		simulateFailure := false
 		wg := registerTestListeners(hub, simulateFailure)
 
 		// kick off saga
 		hub.PubRaw("init-start", []byte{})
 
 		wg.Wait()
+
+		fmt.Println("cache contains:")
+		cache.TransactAll(rootContext, func(trx *service.Transaction) (*service.Transaction, error) {
+			fmt.Printf(" - %s\n", trx.ID)
+			return nil, nil
+		})
 	},
 }
 

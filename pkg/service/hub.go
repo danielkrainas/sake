@@ -23,6 +23,8 @@ type DebugHub struct {
 	groups  map[interface{}][]chan interface{}
 }
 
+var _ HubConnector = &DebugHub{}
+
 func NewDebugHub() *DebugHub {
 	return &DebugHub{
 		pubsub: pubsub.New(0),
@@ -115,14 +117,14 @@ func (hub *DebugHub) SubReq(topic string, handler func(req *protocol.Request)) {
 
 func (hub *DebugHub) requestHandler(handler func(request *protocol.Request)) func(data []byte) {
 	return func(data []byte) {
-		request, _ := UnMarshalRequest(data)
+		request, _ := UnmarshalRequest(data)
 		handler(request)
 	}
 }
 
 func (hub *DebugHub) replyHandler(handler func(reply *protocol.Reply)) func(data []byte) {
 	return func(data []byte) {
-		reply, _ := UnMarshalReply(data)
+		reply, _ := UnmarshalReply(data)
 		handler(reply)
 	}
 }
@@ -138,7 +140,7 @@ func (hub *DebugHub) subscriptionListener(ch chan interface{}, quitCh chan struc
 	}
 }
 
-func UnMarshalReply(data []byte) (*protocol.Reply, error) {
+func UnmarshalReply(data []byte) (*protocol.Reply, error) {
 	reply := &protocol.Reply{}
 	if err := proto.Unmarshal(data, reply); err != nil {
 		return nil, err
@@ -156,7 +158,7 @@ func MarshalReply(reply *protocol.Reply) ([]byte, error) {
 	return data, nil
 }
 
-func UnMarshalRequest(data []byte) (*protocol.Request, error) {
+func UnmarshalRequest(data []byte) (*protocol.Request, error) {
 	req := &protocol.Request{}
 	if err := proto.Unmarshal(data, req); err != nil {
 		return nil, err
