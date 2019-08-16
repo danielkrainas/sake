@@ -6,14 +6,16 @@ import (
 	"github.com/cskr/pubsub"
 	"github.com/danielkrainas/sake/pkg/service/protobuf"
 	"github.com/golang/protobuf/proto"
+	"github.com/prometheus/common/log"
+	"go.uber.org/zap"
 )
 
 type HubConnector interface {
 	CancelAll() error
 	CancelGroup(groupKey interface{}) error
-	SubReply(groupKey interface{}, topic string, handler func(req *protocol.Reply))
+	SubReply(groupKey interface{}, topic string, handler func(req *protocol.Reply) error)
 	Pub(topic string, req *protocol.Request)
-	Sub(topic string, handler func(rawMessage []byte))
+	Sub(topic string, handler func(rawMessage []byte) error)
 }
 
 type DebugHub struct {
@@ -72,7 +74,7 @@ func (hub *DebugHub) CancelGroup(groupKey interface{}) error {
 	return nil
 }
 
-func (hub *DebugHub) SubReply(groupKey interface{}, topic string, handler func(req *protocol.Reply)) {
+func (hub *DebugHub) SubReply(groupKey interface{}, topic string, handler func(req *protocol.Reply) error) {
 	ch := hub.pubsub.Sub(topic)
 	hub.chMutex.Lock()
 	defer hub.chMutex.Unlock()
@@ -80,7 +82,7 @@ func (hub *DebugHub) SubReply(groupKey interface{}, topic string, handler func(r
 	hub.groups[groupKey] = group
 	quitCh := make(chan struct{})
 	hub.quits[ch] = quitCh
-	go hub.subscriptionListener(ch, quitCh, hub.replyHandler(handler))
+	go hub.subscriptionListener(topic, ch, quitCh, hub.replyHandler(handler))
 }
 
 func (hub *DebugHub) Pub(topic string, req *protocol.Request) {
@@ -97,45 +99,48 @@ func (hub *DebugHub) PubRaw(topic string, data []byte) {
 	hub.pubsub.Pub(data, topic)
 }
 
-func (hub *DebugHub) Sub(topic string, handler func(data []byte)) {
+func (hub *DebugHub) Sub(topic string, handler func(data []byte) error) {
 	ch := hub.pubsub.Sub(topic)
 	hub.chMutex.Lock()
 	defer hub.chMutex.Unlock()
 	quitCh := make(chan struct{})
 	hub.quits[ch] = quitCh
-	go hub.subscriptionListener(ch, quitCh, handler)
+	go hub.subscriptionListener(topic, ch, quitCh, handler)
 }
 
-func (hub *DebugHub) SubReq(topic string, handler func(req *protocol.Request)) {
+func (hub *DebugHub) SubReq(topic string, handler func(req *protocol.Request) error) {
 	ch := hub.pubsub.Sub(topic)
 	hub.chMutex.Lock()
 	defer hub.chMutex.Unlock()
 	quitCh := make(chan struct{})
 	hub.quits[ch] = quitCh
-	go hub.subscriptionListener(ch, quitCh, hub.requestHandler(handler))
+	go hub.subscriptionListener(topic, ch, quitCh, hub.requestHandler(handler))
 }
 
-func (hub *DebugHub) requestHandler(handler func(request *protocol.Request)) func(data []byte) {
-	return func(data []byte) {
+func (hub *DebugHub) requestHandler(handler func(request *protocol.Request) error) func(data []byte) error {
+	return func(data []byte) error {
 		request, _ := UnmarshalRequest(data)
-		handler(request)
+		return handler(request)
 	}
 }
 
-func (hub *DebugHub) replyHandler(handler func(reply *protocol.Reply)) func(data []byte) {
-	return func(data []byte) {
+func (hub *DebugHub) replyHandler(handler func(reply *protocol.Reply) error) func(data []byte) error {
+	return func(data []byte) error {
 		reply, _ := UnmarshalReply(data)
-		handler(reply)
+		return handler(reply)
 	}
 }
 
-func (hub *DebugHub) subscriptionListener(ch chan interface{}, quitCh chan struct{}, handler func(data []byte)) {
+func (hub *DebugHub) subscriptionListener(topic string, ch chan interface{}, quitCh chan struct{}, handler func(data []byte) error) {
 	for {
 		select {
 		case <-quitCh:
 			return
 		case data := <-ch:
-			handler(data.([]byte))
+			if err := handler(data.([]byte)); err != nil {
+				log.Warn("subscriber failed", zap.String("topic", topic))
+				ch <- data
+			}
 		}
 	}
 }

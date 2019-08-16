@@ -2,13 +2,14 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 
 	"github.com/danielkrainas/sake/pkg/service"
 	"github.com/danielkrainas/sake/pkg/service/protobuf"
+	"github.com/danielkrainas/sake/pkg/util/log"
 )
 
 func init() {
@@ -22,20 +23,19 @@ var runCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		/*config, err := service.ResolveConfig(configPath)
 		if err != nil {
-			log.Fatal(rootContext, err.Error())
+			log.Fatal(err.Error())
 			return
 		}*/
 
-		storage, err := service.NewDebugStorage(nil, nil)
+		storage, err := service.NewDebugStorage([]*service.Workflow{service.Workflows[1]}, nil)
 		if err != nil {
-			log.Fatal(rootContext, err)
+			log.Fatal("storage init failed", zap.Error(err))
 		}
 
 		var cache service.CacheService
-
 		cache, err = service.NewInMemoryCache()
 		if err != nil {
-			log.Fatal(rootContext, err)
+			log.Fatal("cache init failed", zap.Error(err))
 		}
 
 		cache = &service.WriteThruCache{
@@ -44,19 +44,22 @@ var runCmd = &cobra.Command{
 		}
 
 		hub := service.NewDebugHub()
-		coordinator := service.NewCoordinator(rootContext, hub, cache, storage)
+		coordinator, err := service.NewCoordinator(rootContext, hub, cache, storage)
+		if err != nil {
+			log.Fatal("coordinator init failed", zap.Error(err))
+		}
 
-		coordinator.Register(service.Workflows[1])
+		//coordinator.Register(service.Workflows[1])
 
 		simulateFailure := false
-		wg := registerTestListeners(hub, simulateFailure)
+		wg := registerTestListeners(hub, coordinator, simulateFailure)
 
 		// kick off saga
 		hub.PubRaw("init-start", []byte{})
 
 		wg.Wait()
 
-		fmt.Println("cache contains:")
+		log.Debug("cache contents:")
 		cache.TransactAll(rootContext, func(trx *service.Transaction) (*service.Transaction, error) {
 			fmt.Printf(" - %s\n", trx.ID)
 			return nil, nil
@@ -64,15 +67,16 @@ var runCmd = &cobra.Command{
 	},
 }
 
-func registerTestListeners(hub *service.DebugHub, simulateFailure bool) *sync.WaitGroup {
-	hub.SubReq("start", func(req *protocol.Request) {
-		fmt.Println("coordinator called start")
-		fmt.Println("replying success")
+func registerTestListeners(hub *service.DebugHub, coordinator *service.Coordinator, simulateFailure bool) *sync.WaitGroup {
+	hub.SubReq("start", func(req *protocol.Request) error {
+		log.Debug("coordinator called start")
+		log.Debug("replying success")
 		reply := &protocol.Reply{
 			NewData: []byte("started"),
 		}
 
 		go hub.PubReply(req.SuccessReplyTopic, reply)
+		return nil
 	})
 
 	wg := sync.WaitGroup{}
@@ -81,32 +85,36 @@ func registerTestListeners(hub *service.DebugHub, simulateFailure bool) *sync.Wa
 		wg.Add(2)
 	}
 
-	hub.SubReq("cancel-start", func(req *protocol.Request) {
-		fmt.Println("coordinator rollback start")
-		fmt.Println("replying success")
+	hub.SubReq("cancel-start", func(req *protocol.Request) error {
+		log.Debug("coordinator rollback start")
+		log.Debug("replying success")
 
 		go func() {
 			hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 			wg.Done()
 		}()
+
+		return nil
 	})
 
-	hub.SubReq("middle", func(req *protocol.Request) {
-		fmt.Println("coordinator called middle")
-		fmt.Println("replying success")
+	hub.SubReq("middle", func(req *protocol.Request) error {
+		log.Debug("coordinator called middle")
+		log.Debug("replying success")
 
 		go func() {
 			wg.Done()
 			hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 		}()
+
+		return nil
 	})
 
-	hub.SubReq("end", func(req *protocol.Request) {
-		fmt.Println("coordinator called end")
+	hub.SubReq("end", func(req *protocol.Request) error {
+		log.Debug("coordinator called end")
 		if simulateFailure {
-			fmt.Println("replying failed, should rollback")
+			log.Debug("replying failed, should rollback")
 		} else {
-			fmt.Println("replying success")
+			log.Debug("replying success")
 		}
 
 		go func() {
@@ -117,16 +125,20 @@ func registerTestListeners(hub *service.DebugHub, simulateFailure bool) *sync.Wa
 				hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 			}
 		}()
+
+		return nil
 	})
 
-	hub.SubReq("cancel-middle", func(req *protocol.Request) {
-		fmt.Println("coordinator rollback middle")
-		fmt.Println("replying success")
+	hub.SubReq("cancel-middle", func(req *protocol.Request) error {
+		log.Debug("coordinator rollback middle")
+		log.Debug("replying success")
 
 		go func() {
 			wg.Done()
 			hub.PubReply(req.SuccessReplyTopic, &protocol.Reply{})
 		}()
+
+		return nil
 	})
 
 	return &wg

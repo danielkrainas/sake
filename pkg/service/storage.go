@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/danielkrainas/sake/pkg/util/log"
 	memdb "github.com/hashicorp/go-memdb"
 )
 
@@ -57,14 +58,21 @@ func NewDebugStorage(workflows []*Workflow, transactions []*Transaction) (*Debug
 
 	txn := db.Txn(true)
 	for _, wf := range workflows {
-		txn.Insert("workflows", wf)
+		log.Info("pre-inserting workflow", WorkflowField(wf))
+		if err := txn.Insert("workflow", wf); err != nil {
+			return nil, err
+		}
 	}
 
 	for _, trx := range transactions {
-		txn.Insert("transaction", trx)
+		log.Info("pre-inserting transaction", TransactionFields(trx)...)
+		if err := txn.Insert("transaction", trx); err != nil {
+			return nil, err
+		}
 	}
 
 	txn.Commit()
+	log.Info("in-memory storage ready")
 	return storage, nil
 }
 
@@ -92,8 +100,8 @@ func (storage *DebugStorage) SaveWorkflow(ctx context.Context, wf *Workflow) err
 
 func (storage *DebugStorage) LoadAllWorkflows(ctx context.Context) ([]*Workflow, error) {
 	result := make([]*Workflow, 0)
-	transact := storage.db.Txn(true)
-	it, err := transact.Get("workflows", "id")
+	transact := storage.db.Txn(false)
+	it, err := transact.Get("workflow", "id")
 	if err != nil {
 		transact.Abort()
 		return nil, err
@@ -108,14 +116,14 @@ func (storage *DebugStorage) LoadAllWorkflows(ctx context.Context) ([]*Workflow,
 }
 
 func (storage *DebugStorage) LoadActiveTransactions(ctx context.Context) ([]*Transaction, error) {
-	result := make([]*Transaction, 0)
-	transact := storage.db.Txn(true)
+	transact := storage.db.Txn(false)
 	it, err := transact.Get("transaction", "id")
 	if err != nil {
 		transact.Abort()
 		return nil, err
 	}
 
+	result := make([]*Transaction, 0)
 	for obj := it.Next(); obj != nil; obj = it.Next() {
 		trx := obj.(*Transaction)
 		if !trx.IsCompleted() {

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/danielkrainas/sake/pkg/util/log"
 	memdb "github.com/hashicorp/go-memdb"
 )
 
@@ -90,6 +91,7 @@ func NewInMemoryCache() (*InMemoryCache, error) {
 		return nil, err
 	}
 
+	log.Info("in-memory cache ready")
 	return &InMemoryCache{
 		db: db,
 	}, nil
