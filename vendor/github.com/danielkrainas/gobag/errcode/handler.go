@@ -2,6 +2,7 @@ package errcode
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 )
 
@@ -32,5 +33,11 @@ func ServeJSON(w http.ResponseWriter, err error) error {
 	}
 
 	w.WriteHeader(status)
-	return json.NewEncoder(w).Encode(err)
+	if buf, err := json.Marshal(err); err != nil {
+		return fmt.Errorf("cannot encode error response: %v", err)
+	} else {
+		w.Write(buf)
+	}
+
+	return nil
 }
