@@ -249,7 +249,6 @@ func (hub *StanHub) CancelAll() error {
 	}
 
 	hub.subs = make([]stan.Subscription, 0)
-	defer hub.groupMutex.Unlock()
 	for _, subs := range hub.groups {
 		for _, sub := range subs {
 			if err := sub.Close(); err != nil {
