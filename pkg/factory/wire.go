@@ -15,6 +15,6 @@ func Coordinator(ctx context.Context, config *service.Config) (service.Coordinat
 }
 
 func ComponentManagerWithCoordinator(ctx context.Context, config *service.Config) (*service.ComponentManager, error) {
-	wire.Build(InitializeComponentManager, InitializeCoordinator, InitializeCache, InitializeStorage, InitializeHub)
+	wire.Build(InitializeComponentManager, InitializeServer, InitializeAPI, InitializeCoordinator, InitializeCache, InitializeStorage, InitializeHub)
 	return &service.ComponentManager{}, nil
 }

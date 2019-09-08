@@ -12,10 +12,10 @@ github.com/cskr/pubsub
 # github.com/danielkrainas/gobag v0.0.0-20190904181107-0c8a1ae51691
 github.com/danielkrainas/gobag/context
 github.com/danielkrainas/gobag/errcode
-github.com/danielkrainas/gobag/log
+github.com/danielkrainas/gobag/http
+github.com/danielkrainas/gobag/util/uid
 github.com/danielkrainas/gobag/api/describe
 github.com/danielkrainas/gobag/util/token
-github.com/danielkrainas/gobag/util/uid
 # github.com/go-yaml/yaml v2.1.0+incompatible
 github.com/go-yaml/yaml
 # github.com/gogo/protobuf v1.3.0

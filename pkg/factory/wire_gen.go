@@ -49,7 +49,15 @@ func ComponentManagerWithCoordinator(ctx context.Context, config *service.Config
 	if err != nil {
 		return nil, err
 	}
-	componentManager, err := InitializeComponentManager(ctx, coordinatorService)
+	mux, err := InitializeAPI()
+	if err != nil {
+		return nil, err
+	}
+	server, err := InitializeServer(ctx, config, mux, cacheService)
+	if err != nil {
+		return nil, err
+	}
+	componentManager, err := InitializeComponentManager(ctx, coordinatorService, server)
 	if err != nil {
 		return nil, err
 	}

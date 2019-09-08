@@ -11,10 +11,9 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type RootContext context.Context
-
-func InitializeComponentManager(ctx context.Context, coordinator service.CoordinatorService) (*service.ComponentManager, error) {
+func InitializeComponentManager(ctx context.Context, coordinator service.CoordinatorService, server *api.Server) (*service.ComponentManager, error) {
 	cm := service.NewComponentManager()
+	cm.MustUse(server)
 	if coordinator != nil {
 		cm.MustUse(service.NewTaskComponent("expiration_trigger", 1*time.Second, zapcore.DebugLevel, &service.ExpirationTrigger{
 			Coordinator: coordinator,
@@ -80,8 +79,8 @@ func InitializeCache(ctx context.Context, config *service.Config, storage servic
 	return cache, nil
 }
 
-func InitializeServer(ctx context.Context, config *service.Config, mux *api.Mux) (service.APIServer, error) {
-	return api.NewServer(ctx, mux, api.ServerConfig{
+func InitializeServer(ctx context.Context, config *service.Config, mux *api.Mux, cache service.CacheService) (*api.Server, error) {
+	return api.NewServer(ctx, mux, cache, api.ServerConfig{
 		Addr: config.HTTP.Addr,
 	})
 }

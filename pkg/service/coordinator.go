@@ -11,10 +11,6 @@ import (
 	"go.uber.org/zap"
 )
 
-type APIServer interface {
-	ListenAndServe() error
-}
-
 type CoordinatorService interface {
 	Component
 	Register(wf *Workflow) error

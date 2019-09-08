@@ -210,8 +210,8 @@ func NewStanHub(clusterID string, natsURL string, clientID string, durableName s
 
 func (hub *StanHub) CancelAll() error {
 	hub.subMutex.Lock()
-	defer hub.subMutex.Unlock()
 	hub.groupMutex.Lock()
+	defer hub.subMutex.Unlock()
 	defer hub.groupMutex.Unlock()
 	for _, sub := range hub.subs {
 		if err := sub.Close(); err != nil {
