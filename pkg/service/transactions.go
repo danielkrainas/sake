@@ -9,18 +9,18 @@ import (
 )
 
 type Stage struct {
-	Next            string
-	Rollback        string
-	RollbackTimeout time.Duration
-	Timeout         time.Duration
-	Terminate       bool
+	Next            string        `json:"next"`
+	Rollback        string        `json:"rollback"`
+	RollbackTimeout time.Duration `json:"rollback_timeout,omitempty"`
+	Timeout         time.Duration `json:"timeout,omitempty"`
+	Terminate       bool          `json:"terminate,omitempty"`
 }
 
 type Workflow struct {
-	Name        string
-	TriggeredBy string
-	StartAt     string
-	Stages      map[string]*Stage
+	Name        string            `json:"name"`
+	TriggeredBy string            `json:"trigger"`
+	StartAt     string            `json:"start"`
+	Stages      map[string]*Stage `json:"stages"`
 }
 
 type TransactionState string

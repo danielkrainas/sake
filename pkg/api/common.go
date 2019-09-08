@@ -19,7 +19,8 @@ type RequestContext struct {
 	StartedAt time.Time
 	Errors    errcode.Errors
 
-	Cache service.CacheService
+	Coordinator service.CoordinatorService
+	Cache       service.CacheService
 }
 
 type ContextKey int

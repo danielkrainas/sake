@@ -79,8 +79,8 @@ func InitializeCache(ctx context.Context, config *service.Config, storage servic
 	return cache, nil
 }
 
-func InitializeServer(ctx context.Context, config *service.Config, mux *api.Mux, cache service.CacheService) (*api.Server, error) {
-	return api.NewServer(ctx, mux, cache, api.ServerConfig{
+func InitializeServer(ctx context.Context, config *service.Config, mux *api.Mux, cache service.CacheService, coordinator service.CoordinatorService) (*api.Server, error) {
+	return api.NewServer(ctx, mux, cache, coordinator, api.ServerConfig{
 		Addr: config.HTTP.Addr,
 	})
 }

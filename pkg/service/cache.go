@@ -10,6 +10,7 @@ import (
 type CacheService interface {
 	PutWorkflow(ctx context.Context, wf *Workflow) error
 	GetWorkflow(ctx context.Context, name string) (*Workflow, error)
+	GetAllWorkflows(ctx context.Context) ([]*Workflow, error)
 	RemoveWorkflow(ctx context.Context, wf *Workflow) error
 	PutTransaction(ctx context.Context, trx *Transaction) error
 	GetTransaction(ctx context.Context, id string) (*Transaction, error)
@@ -106,6 +107,25 @@ func (cache *InMemoryCache) PutWorkflow(ctx context.Context, wf *Workflow) error
 
 	transact.Commit()
 	return nil
+}
+
+func (cache *InMemoryCache) GetAllWorkflows(ctx context.Context) ([]*Workflow, error) {
+	result := make([]*Workflow, 0)
+	transact := cache.db.Txn(false)
+	defer transact.Abort()
+	it, err := transact.Get("workflow", "id")
+	if err != nil {
+		return nil, err
+	}
+
+	for obj := it.Next(); obj != nil; obj = it.Next() {
+		wf, ok := obj.(*Workflow)
+		if ok {
+			result = append(result, wf)
+		}
+	}
+
+	return result, nil
 }
 
 func (cache *InMemoryCache) GetWorkflow(ctx context.Context, name string) (*Workflow, error) {

@@ -1,0 +1,15 @@
+{
+  "name": "Test Flow",
+  "trigger": "init-start",
+  "start": "start",
+  "stages": {
+    "start": {
+      "next": "end",
+      "rollback": "cancel-start"
+    },
+
+    "end": {
+      "terminate": true
+    }
+  }
+}

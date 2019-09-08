@@ -11,18 +11,17 @@ import (
 	"github.com/danielkrainas/gobag/errcode"
 	"github.com/danielkrainas/gobag/http"
 	"github.com/danielkrainas/gobag/util/uid"
-	"github.com/urfave/negroni"
-	"go.uber.org/zap"
-
 	"github.com/danielkrainas/sake/pkg/service"
 	"github.com/danielkrainas/sake/pkg/util/log"
+	"github.com/urfave/negroni"
+	"go.uber.org/zap"
 )
 
 type ServerConfig struct {
 	Addr string
 }
 
-func NewServer(ctx context.Context, mux http.Handler, cache service.CacheService, config ServerConfig) (*Server, error) {
+func NewServer(ctx context.Context, mux http.Handler, cache service.CacheService, coordinator service.CoordinatorService, config ServerConfig) (*Server, error) {
 	n := negroni.New()
 	srv := &Server{
 		config: config,
@@ -39,7 +38,7 @@ func NewServer(ctx context.Context, mux http.Handler, cache service.CacheService
 	})
 
 	n.Use(aliveHandler("/"))
-	n.Use(contextHandler(cache))
+	n.Use(contextHandler(cache, coordinator))
 	n.Use(loggingHandler())
 	n.UseHandler(mux)
 
@@ -95,7 +94,8 @@ func loggingHandler() negroni.Handler {
 	return negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 		rc := GetRequestContext(r)
 		if rc != nil {
-			w, iw := baghttp.NewInstrumentedResponseWriter(w)
+			var iw *baghttp.InstrumentedResponseWriter
+			w, iw = baghttp.NewInstrumentedResponseWriter(w)
 			log.Info("request start", requestLogFields(rc, r)...)
 			defer func() {
 				info := iw.Info()
@@ -115,13 +115,14 @@ func loggingHandler() negroni.Handler {
 	})
 }
 
-func contextHandler(cache service.CacheService) negroni.Handler {
+func contextHandler(cache service.CacheService, coordinator service.CoordinatorService) negroni.Handler {
 	return negroni.HandlerFunc(func(w http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
 		rc := &RequestContext{
-			Errors:    make(errcode.Errors, 0),
-			Cache:     cache,
-			RequestID: uid.Generate(),
-			StartedAt: time.Now(),
+			Errors:      make(errcode.Errors, 0),
+			Cache:       cache,
+			Coordinator: coordinator,
+			RequestID:   uid.Generate(),
+			StartedAt:   time.Now(),
 		}
 
 		next(w, AppendRequestContext(rc, r))

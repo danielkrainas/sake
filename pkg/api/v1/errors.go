@@ -15,4 +15,11 @@ var (
 		Description:    "",
 		HTTPStatusCode: http.StatusBadRequest,
 	})
+
+	ErrorCodeDuplicateWorkflowName = errcode.Register(ErrorGroup, errcode.ErrorDescriptor{
+		Value:          "DUPLICATE_WORKFLOW_NAME",
+		Message:        "workflow with name %q already exists",
+		Description:    "",
+		HTTPStatusCode: http.StatusBadRequest,
+	})
 )

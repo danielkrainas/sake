@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/danielkrainas/gobag/util/token"
+	"github.com/danielkrainas/sake/pkg/api/v1"
 	"github.com/danielkrainas/sake/pkg/service/protobuf"
 	"github.com/danielkrainas/sake/pkg/util/log"
 	"go.uber.org/zap"
@@ -18,11 +19,10 @@ type CoordinatorService interface {
 }
 
 type Coordinator struct {
-	Hub               HubConnector
-	Context           context.Context
-	Cache             CacheService
-	readyWaitGroup    sync.WaitGroup
-	shutdownWaitGroup sync.WaitGroup
+	Hub            HubConnector
+	Context        context.Context
+	Cache          CacheService
+	readyWaitGroup sync.WaitGroup
 }
 
 var _ CoordinatorService = &Coordinator{}
@@ -91,7 +91,8 @@ func (c *Coordinator) Register(wf *Workflow) error {
 	if wf, err := c.Cache.GetWorkflow(c.Context, wf.Name); err != nil {
 		return err
 	} else if wf != nil {
-		return fmt.Errorf("workflow with name %q already registered", wf.Name)
+		log.Info("workflow already exists", WorkflowField(wf))
+		return v1.ErrorCodeDuplicateWorkflowName.WithArgs(wf.Name)
 	}
 
 	if err := c.Cache.PutWorkflow(c.Context, wf); err != nil {

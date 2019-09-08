@@ -53,7 +53,7 @@ func ComponentManagerWithCoordinator(ctx context.Context, config *service.Config
 	if err != nil {
 		return nil, err
 	}
-	server, err := InitializeServer(ctx, config, mux, cacheService)
+	server, err := InitializeServer(ctx, config, mux, cacheService, coordinatorService)
 	if err != nil {
 		return nil, err
 	}
