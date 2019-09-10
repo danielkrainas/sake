@@ -16,12 +16,15 @@ import (
 
 type ReplyGroup map[string]func(req *protocol.Reply) error
 
+type RawGroup map[string]func(rawMessage []byte) error
+
 type HubConnector interface {
 	CancelAll() error
 	CancelGroup(groupKey interface{}) error
 	SubReply(groupKey interface{}, finalizer func(), replyGroup ReplyGroup) error
+	SubGroup(groupKey interface{}, group RawGroup) error
 	Pub(topic string, req *protocol.Request) error
-	Sub(topic string, handler func(rawMessage []byte) error) error
+	//Sub(topic string, handler func(rawMessage []byte) error) error
 }
 
 type DebugHub struct {
@@ -144,6 +147,32 @@ func (hub *DebugHub) Sub(topic string, handler func(data []byte) error) error {
 	return nil
 }
 
+func (hub *DebugHub) SubGroup(groupKey interface{}, handlerGroup RawGroup) error {
+	hub.chMutex.Lock()
+	defer hub.chMutex.Unlock()
+	group, ok := hub.groups[groupKey]
+	if ok && len(group) > 0 {
+		return errors.New("group already exists")
+	}
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Error("recovering failed subscription action", zap.Any("error", err))
+		}
+	}()
+
+	group = make([]chan interface{}, 0)
+	for topic, handler := range handlerGroup {
+		ch := hub.pubsub.Sub(topic)
+		hub.groups[groupKey] = group
+		quitCh := make(chan struct{})
+		hub.quits[ch] = quitCh
+		go hub.subscriptionListener(topic, ch, quitCh, handler)
+	}
+
+	return nil
+}
+
 func (hub *DebugHub) SubReq(topic string, handler func(req *protocol.Request) error) error {
 	ch := hub.pubsub.Sub(topic)
 	hub.chMutex.Lock()
@@ -235,6 +264,7 @@ func (hub *StanHub) CancelAll() error {
 func (hub *StanHub) CancelGroup(groupKey interface{}) error {
 	hub.groupMutex.Lock()
 	defer hub.groupMutex.Unlock()
+	log.Debug("stan cancel group", zap.Any("group", groupKey))
 	group, ok := hub.groups[groupKey]
 	if !ok {
 		return nil
@@ -311,6 +341,36 @@ func (hub *StanHub) Sub(topic string, handler func(rawMessage []byte) error) err
 
 	hub.subs = append(hub.subs, sub)
 	log.Debug("stan new raw subscriber", zap.String("topic", topic))
+	return nil
+}
+
+func (hub *StanHub) SubGroup(groupKey interface{}, handlerGroup RawGroup) error {
+	hub.groupMutex.Lock()
+	defer hub.groupMutex.Unlock()
+	subs, ok := hub.groups[groupKey]
+	if ok && len(subs) > 0 {
+		return fmt.Errorf("group already exists")
+	}
+
+	subs = make([]stan.Subscription, 0)
+	for topic, handler := range handlerGroup {
+		log.Debug("stan new raw subscriber", zap.String("topic", topic), zap.Any("group", groupKey))
+		sub, err := hub.Conn.Subscribe(
+			topic,
+			hub.rawHandler(handler),
+			stan.DurableName(hub.DurableName),
+			stan.MaxInflight(1),
+			stan.SetManualAckMode(),
+		)
+
+		if err != nil {
+			return err
+		}
+
+		subs = append(subs, sub)
+		hub.groups[groupKey] = subs
+	}
+
 	return nil
 }
 

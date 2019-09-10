@@ -16,9 +16,9 @@ var (
 		HTTPStatusCode: http.StatusBadRequest,
 	})
 
-	ErrorCodeDuplicateWorkflowName = errcode.Register(ErrorGroup, errcode.ErrorDescriptor{
-		Value:          "DUPLICATE_WORKFLOW_NAME",
-		Message:        "workflow with name %q already exists",
+	ErrorCodeWorkflowMultiModify = errcode.Register(ErrorGroup, errcode.ErrorDescriptor{
+		Value:          "WORKFLOW_MULTI_MODIFY",
+		Message:        "two or more requests attempted to modify the %q workflow. please retry the request",
 		Description:    "",
 		HTTPStatusCode: http.StatusBadRequest,
 	})

@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/danielkrainas/gobag/util/token"
@@ -16,11 +17,34 @@ type Stage struct {
 	Terminate       bool          `json:"terminate,omitempty"`
 }
 
+type WorkflowStatus int32
+
+const (
+	StatusInactive WorkflowStatus = 0
+	StatusActive                  = 1
+	StatusDraining                = 2
+)
+
 type Workflow struct {
-	Name        string            `json:"name"`
-	TriggeredBy string            `json:"trigger"`
-	StartAt     string            `json:"start"`
-	Stages      map[string]*Stage `json:"stages"`
+	ID                    string            `json:"id"`
+	Name                  string            `json:"name"`
+	TriggeredBy           string            `json:"trigger"`
+	StartAt               string            `json:"start"`
+	Stages                map[string]*Stage `json:"stages"`
+	NumActiveTransactions int32             `json:"num_active_transactions"`
+	StatusCode            int32             `json:"status"`
+}
+
+func (wf *Workflow) SetStatus(status WorkflowStatus) {
+	atomic.StoreInt32(&wf.StatusCode, int32(status))
+}
+
+func (wf *Workflow) SetStatusCond(newStatus WorkflowStatus, currentStatus WorkflowStatus) bool {
+	return atomic.CompareAndSwapInt32(&wf.StatusCode, int32(currentStatus), int32(newStatus))
+}
+
+func (wf *Workflow) Status() WorkflowStatus {
+	return WorkflowStatus(atomic.LoadInt32(&wf.StatusCode))
 }
 
 type TransactionState string

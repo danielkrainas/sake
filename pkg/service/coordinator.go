@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/danielkrainas/gobag/util/token"
+	"github.com/danielkrainas/gobag/util/uid"
 	"github.com/danielkrainas/sake/pkg/api/v1"
 	"github.com/danielkrainas/sake/pkg/service/protobuf"
 	"github.com/danielkrainas/sake/pkg/util/log"
@@ -16,6 +18,8 @@ type CoordinatorService interface {
 	Component
 	Register(wf *Workflow) error
 	UpdateExpired() error
+	ClearInactive() error
+	UnloadWorkflow(name string) (bool, error)
 }
 
 type Coordinator struct {
@@ -87,20 +91,89 @@ func (c *Coordinator) shutdown() error {
 	return nil
 }
 
+func (c *Coordinator) UnloadWorkflow(name string) (bool, error) {
+	found := false
+	wfs, err := c.Cache.FilterWorkflows(c.Context, func(wf *Workflow) (bool, error) {
+		return wf.Name == name && wf.Status() == StatusActive, nil
+	})
+
+	if err != nil {
+		return found, err
+	} else if len(wfs) < 1 {
+		return found, nil
+	}
+
+	wf := wfs[0]
+	found = true
+	log.Info("draining workflow", zap.String("id", wf.ID), WorkflowField(wf))
+	if ok := wf.SetStatusCond(StatusDraining, StatusActive); !ok {
+		return found, v1.ErrorCodeWorkflowMultiModify.WithArgs(wf.Name)
+	}
+
+	if err := c.Hub.CancelGroup(wf.ID); err != nil {
+		return found, err
+	}
+
+	return found, c.Cache.PutWorkflow(c.Context, wf)
+}
+
 func (c *Coordinator) Register(wf *Workflow) error {
-	if wf, err := c.Cache.GetWorkflow(c.Context, wf.Name); err != nil {
+	wf.NumActiveTransactions = 0
+	if wf.ID == "" {
+		wf.ID = uid.Generate()
+		wf.SetStatus(StatusActive)
+	}
+
+	upgraded, err := c.UnloadWorkflow(wf.Name)
+	if err != nil {
 		return err
-	} else if wf != nil {
-		log.Info("workflow already exists", WorkflowField(wf))
-		return v1.ErrorCodeDuplicateWorkflowName.WithArgs(wf.Name)
 	}
 
 	if err := c.Cache.PutWorkflow(c.Context, wf); err != nil {
 		return err
 	}
 
-	log.Info("registered workflow", zap.String("workflow", wf.Name))
-	c.Hub.Sub(wf.TriggeredBy, c.createWorkflowTriggerHandler(wf))
+	if wf.Status() == StatusActive {
+		err = c.Hub.SubGroup(wf.ID, RawGroup{
+			wf.TriggeredBy: c.createWorkflowTriggerHandler(wf),
+		})
+
+		if err == nil {
+			if upgraded {
+				log.Info("workflow upgraded", WorkflowField(wf))
+			} else {
+				log.Info("workflow registered", WorkflowField(wf))
+			}
+		}
+	}
+
+	return err
+}
+
+func (c *Coordinator) ClearInactive() error {
+	wfs, err := c.Cache.FilterWorkflows(c.Context, func(wf *Workflow) (bool, error) {
+		return wf.Status() != StatusActive, nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	for _, wf := range wfs {
+		if wf.Status() == StatusDraining && atomic.LoadInt32(&wf.NumActiveTransactions) < 1 {
+			wf.SetStatus(StatusInactive)
+			log.Debug("workflow drained", WorkflowField(wf))
+			if err := c.Cache.PutWorkflow(c.Context, wf); err != nil {
+				return err
+			}
+		}
+
+		log.Debug("unloading inactive workflow", WorkflowField(wf))
+		if err := c.Cache.RemoveWorkflow(c.Context, wf); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -138,6 +211,12 @@ func (c *Coordinator) UpdateExpired() error {
 
 func (c *Coordinator) createWorkflowTriggerHandler(wf *Workflow) func([]byte) error {
 	return func(data []byte) error {
+		if wf.Status() != StatusActive {
+			log.Error("inactive workflow trigger handler still subscribed", WorkflowField(wf))
+			return fmt.Errorf("workflow %q (id=%s) is inactive", wf.Name, wf.ID)
+		}
+
+		atomic.AddInt32(&wf.NumActiveTransactions, 1)
 		trx := NewTransaction(wf, nil)
 		log.Info("start transaction", log.Combine(WorkflowField(wf), TransactionFields(trx)...)...)
 		trx.Lock()
@@ -238,6 +317,7 @@ func (c *Coordinator) transition(trx *Transaction) error {
 
 		c.Hub.Pub(trx.StageTopic, req)
 	} else {
+		atomic.AddInt32(&trx.Workflow.NumActiveTransactions, -1)
 		log.Info("completed transaction", TransactionFields(trx)...)
 		if err := c.unload(trx); err != nil {
 			return err

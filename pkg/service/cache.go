@@ -9,13 +9,13 @@ import (
 
 type CacheService interface {
 	PutWorkflow(ctx context.Context, wf *Workflow) error
-	GetWorkflow(ctx context.Context, name string) (*Workflow, error)
 	GetAllWorkflows(ctx context.Context) ([]*Workflow, error)
 	RemoveWorkflow(ctx context.Context, wf *Workflow) error
 	PutTransaction(ctx context.Context, trx *Transaction) error
 	GetTransaction(ctx context.Context, id string) (*Transaction, error)
 	RemoveTransaction(ctx context.Context, trx *Transaction) error
 	TransactAll(ctx context.Context, action func(trx *Transaction) error) error
+	FilterWorkflows(ctx context.Context, predicate func(wf *Workflow) (bool, error)) ([]*Workflow, error)
 }
 
 type WriteThruCache struct {
@@ -70,7 +70,7 @@ func NewInMemoryCache() (*InMemoryCache, error) {
 					"id": &memdb.IndexSchema{
 						Name:    "id",
 						Unique:  true,
-						Indexer: &memdb.StringFieldIndex{Field: "Name"},
+						Indexer: &memdb.StringFieldIndex{Field: "ID"},
 					},
 				},
 			},
@@ -128,23 +128,9 @@ func (cache *InMemoryCache) GetAllWorkflows(ctx context.Context) ([]*Workflow, e
 	return result, nil
 }
 
-func (cache *InMemoryCache) GetWorkflow(ctx context.Context, name string) (*Workflow, error) {
-	transact := cache.db.Txn(false)
-	defer transact.Abort()
-
-	iwf, err := transact.First("workflow", "id", name)
-	if err != nil {
-		return nil, err
-	} else if iwf == nil {
-		return nil, nil
-	}
-
-	return iwf.(*Workflow), nil
-}
-
 func (cache *InMemoryCache) RemoveWorkflow(ctx context.Context, wf *Workflow) error {
 	transact := cache.db.Txn(true)
-	iwf, err := transact.First("workflow", "id", wf.Name)
+	iwf, err := transact.First("workflow", "id", wf.ID)
 	if err == nil && iwf != nil {
 		err = transact.Delete("workflow", iwf)
 	}
@@ -220,4 +206,28 @@ func (cache *InMemoryCache) TransactAll(ctx context.Context, action func(trx *Tr
 	}
 
 	return nil
+}
+
+func (cache *InMemoryCache) FilterWorkflows(ctx context.Context, predicate func(wf *Workflow) (bool, error)) ([]*Workflow, error) {
+	result := make([]*Workflow, 0)
+	transact := cache.db.Txn(false)
+	defer transact.Abort()
+	it, err := transact.Get("workflow", "id")
+	if err != nil {
+		return nil, err
+	}
+
+	for obj := it.Next(); obj != nil; obj = it.Next() {
+		wf, ok := obj.(*Workflow)
+		if ok {
+			match, err := predicate(wf)
+			if err != nil {
+				return nil, err
+			} else if match {
+				result = append(result, wf)
+			}
+		}
+	}
+
+	return result, nil
 }

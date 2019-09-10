@@ -15,7 +15,11 @@ func InitializeComponentManager(ctx context.Context, coordinator service.Coordin
 	cm := service.NewComponentManager()
 	cm.MustUse(server)
 	if coordinator != nil {
-		cm.MustUse(service.NewTaskComponent("expiration_trigger", 1*time.Second, zapcore.DebugLevel, &service.ExpirationTrigger{
+		cm.MustUse(service.NewTaskComponent("expiration_trigger", 1*time.Second, zapcore.DebugLevel, &service.ExpirationTriggerTask{
+			Coordinator: coordinator,
+		}))
+
+		cm.MustUse(service.NewTaskComponent("workflow_cleanup", 10*time.Second, zapcore.InfoLevel, &service.WorkflowCleanupTask{
 			Coordinator: coordinator,
 		}))
 

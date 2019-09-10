@@ -19,7 +19,7 @@ var Workflows = []*Workflow{
 		},
 	},
 	{
-		Name:        "More Complicated Test Flow",
+		Name:        "complicated-test",
 		TriggeredBy: "init-start",
 		StartAt:     "start",
 		Stages: map[string]*Stage{

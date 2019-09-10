@@ -1,6 +1,6 @@
 {
-  "name": "Test Flow",
-  "trigger": "init-start",
+  "name": "complicate-test",
+  "trigger": "init-start3",
   "start": "start",
   "stages": {
     "start": {
