@@ -14,13 +14,13 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(coordinatorCmd)
+	rootCmd.AddCommand(engineCmd)
 }
 
-var coordinatorCmd = &cobra.Command{
-	Use:   "coordinator",
-	Short: "run the saga engine coordinator",
-	Long:  "run the saga engine coordinator",
+var engineCmd = &cobra.Command{
+	Use:   "engine",
+	Short: "run the orchestration engine",
+	Long:  "run the orchestration engine",
 	Run: func(cmd *cobra.Command, args []string) {
 		config, err := service.ResolveConfig(configPath)
 		if err != nil {

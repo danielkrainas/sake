@@ -16,7 +16,7 @@ go get -u github.com/danielkrainas/sake
 ## Usage
 
 ```sh
-sake coordinator -c <config_path>
+sake engine -c <config_path>
 ```
 
 ## Project Status
