@@ -5,35 +5,32 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/danielkrainas/gobag/context"
-	baglogger "github.com/danielkrainas/gobag/log"
 	"github.com/danielkrainas/sake/pkg/api"
 	"github.com/danielkrainas/sake/pkg/service"
 	"github.com/danielkrainas/sake/pkg/util/log"
-	"github.com/sirupsen/logrus"
-	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 type RootContext context.Context
 
+func InitializeComponentManager(ctx context.Context, coordinator service.CoordinatorService) (*service.ComponentManager, error) {
+	cm := service.NewComponentManager()
+	if coordinator != nil {
+		cm.MustUse(service.NewTaskComponent("expiration_trigger", 1*time.Second, zapcore.DebugLevel, &service.ExpirationTrigger{
+			Coordinator: coordinator,
+		}))
+
+		cm.MustUse(coordinator)
+	}
+
+	return cm, nil
+}
+
 func InitializeCoordinator(ctx context.Context, hub service.HubConnector, storage service.StorageService, cache service.CacheService) (service.CoordinatorService, error) {
 	coordinator, err := service.NewCoordinator(ctx, hub, cache, storage)
 	if err != nil {
-		return nil, fmt.Errorf("coordinator init failed: %v", err)
+		return nil, err
 	}
-
-	go func() {
-		timeoutWorker := &service.TimeoutWorker{
-			ExitOnError:   false,
-			ScanFrequency: 1 * time.Second,
-		}
-
-		if err := timeoutWorker.Run(ctx, coordinator); err != nil {
-			log.Error("expiration worker failed", zap.Error(err))
-		}
-
-		log.Info("expiration worker exit")
-	}()
 
 	return coordinator, nil
 }
@@ -91,54 +88,4 @@ func InitializeServer(ctx context.Context, config *service.Config, mux *api.Mux)
 
 func InitializeAPI() (*api.Mux, error) {
 	return api.NewMux()
-}
-
-func InitializeLoggingContext(rctx RootContext, config *service.Config) (context.Context, error) {
-	ctx := context.Context(rctx)
-	logrus.SetLevel(logLevel(config.Log.Level))
-	formatter := config.Log.Formatter
-	if formatter == "" {
-		formatter = "text"
-	}
-
-	switch formatter {
-	case "json":
-		logrus.SetFormatter(&logrus.JSONFormatter{
-			TimestampFormat: time.RFC3339Nano,
-		})
-
-	case "text":
-		logrus.SetFormatter(&logrus.TextFormatter{
-			TimestampFormat: time.RFC3339Nano,
-		})
-
-	default:
-		if config.Log.Formatter != "" {
-			return nil, fmt.Errorf("unsupported formatter: %q", config.Log.Formatter)
-		}
-	}
-
-	if len(config.Log.Fields) > 0 {
-		var fields []interface{}
-		for k := range config.Log.Fields {
-			fields = append(fields, k)
-		}
-
-		ctx = bagcontext.WithValues(ctx, config.Log.Fields)
-		ctx = bagcontext.WithLogger(ctx, bagcontext.GetLogger(ctx, fields...))
-	}
-
-	ctx = bagcontext.WithLogger(ctx, bagcontext.GetLogger(ctx))
-	baglogger.Info(ctx, "using %q logging formatter", config.Log.Formatter)
-	return ctx, nil
-}
-
-func logLevel(level string) logrus.Level {
-	l, err := logrus.ParseLevel(level)
-	if err != nil {
-		l = logrus.InfoLevel
-		logrus.Warnf("error parsing level %q: %v, using %q", level, err, l)
-	}
-
-	return l
 }

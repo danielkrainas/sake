@@ -2,6 +2,7 @@ package log
 
 import (
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var logger *zap.Logger
@@ -82,5 +83,38 @@ func ErrorS(format string, args ...interface{}) {
 		sugar.Errorf(format, args...)
 	} else {
 		sugar.Error(format)
+	}
+}
+
+func At(level zapcore.Level, msg string, fields ...zap.Field) {
+	switch level {
+	case zapcore.FatalLevel:
+		logger.Fatal(msg, fields...)
+	case zapcore.InfoLevel:
+		logger.Info(msg, fields...)
+	case zapcore.DebugLevel:
+		logger.Debug(msg, fields...)
+	}
+}
+
+func Atf(level zapcore.Level, format string, args ...interface{}) {
+	if len(args) > 0 {
+		switch level {
+		case zapcore.FatalLevel:
+			sugar.Fatalf(format, args...)
+		case zapcore.InfoLevel:
+			sugar.Infof(format, args...)
+		case zapcore.DebugLevel:
+			sugar.Debugf(format, args...)
+		}
+	} else {
+		switch level {
+		case zapcore.FatalLevel:
+			sugar.Fatal(format)
+		case zapcore.InfoLevel:
+			sugar.Info(format)
+		case zapcore.DebugLevel:
+			sugar.Debug(format)
+		}
 	}
 }

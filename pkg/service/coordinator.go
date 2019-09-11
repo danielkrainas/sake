@@ -16,10 +16,9 @@ type APIServer interface {
 }
 
 type CoordinatorService interface {
+	Component
 	Register(wf *Workflow) error
 	UpdateExpired() error
-	Shutdown() error
-	WaitForShutdown() <-chan struct{}
 }
 
 type Coordinator struct {
@@ -53,49 +52,43 @@ func NewCoordinator(ctx context.Context, hub HubConnector, cache CacheService, s
 		}
 	}
 
-	log.Info("loading stored transactions")
 	activeTransactions, err := storage.LoadActiveTransactions(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't load active transactions: %v", err)
+		return nil, fmt.Errorf("couldn't load stored transactions: %v", err)
 	}
 
-	log.Info("restoring transactions", zap.Int("count", len(activeTransactions)))
+	log.Info("active transactions restored", zap.Int("count", len(activeTransactions)))
 	for _, trx := range activeTransactions {
 		if err := c.load(trx); err != nil {
 			return nil, fmt.Errorf("restoring transaction %s failed: %v", trx.ID, err)
 		}
 	}
 
-	go func() {
-		<-ctx.Done()
-		c.Shutdown()
-	}()
-
-	c.shutdownWaitGroup.Add(1)
-	c.readyWaitGroup.Done()
-	log.Info("coordinator ready")
 	return c, nil
 }
 
-func (c *Coordinator) Shutdown() error {
-	log.Warn("coordinator shutting down")
+func (c *Coordinator) ComponentName() string {
+	return "coordinator"
+}
+
+func (c *Coordinator) Run(ctx ComponentRunContext) error {
+	defer func() {
+		c.shutdown()
+	}()
+
+	c.readyWaitGroup.Done()
+	<-ctx.QuitCh
+	return nil
+}
+
+func (c *Coordinator) shutdown() error {
 	if err := c.Hub.CancelAll(); err != nil {
-		log.Warn("failed to cancel all hub subscriptions", zap.Error(err))
+		log.Error("failed to cancel all hub subscriptions", zap.Error(err))
 	}
 
 	// shutdown hub
 	// clear cache
 	return nil
-}
-
-func (c *Coordinator) WaitForShutdown() <-chan struct{} {
-	ch := make(chan struct{}, 0)
-	go func() {
-		c.shutdownWaitGroup.Wait()
-		ch <- struct{}{}
-	}()
-
-	return ch
 }
 
 func (c *Coordinator) Register(wf *Workflow) error {

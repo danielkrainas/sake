@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,22 +24,34 @@ var coordinatorCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		config, err := service.ResolveConfig(configPath)
 		if err != nil {
-			log.Fatal(err.Error())
+			log.Fatal("configuration failure", zap.Error(err))
+		}
+
+		componentManager, err := factory.ComponentManagerWithCoordinator(rootContext, config)
+		if err != nil {
+			log.Fatal("initialization failed", zap.Error(err))
 			return
 		}
 
-		ctx, cancel := context.WithCancel(rootContext)
-		coordinator, err := factory.Coordinator(ctx, config)
-		if err != nil {
-			log.Fatal("initialization failed", zap.Error(err))
-		}
+		done := make(chan struct{})
+		go func() {
+			if err := componentManager.Run(); err != nil {
+				log.Error("component manager failed", zap.Error(err))
+			}
 
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGTERM)
+			done <- struct{}{}
+			close(done)
+		}()
+
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGTERM)
+		signal.Notify(ch, syscall.SIGINT)
 		select {
-		case <-coordinator.WaitForShutdown():
-		case <-c:
-			cancel()
+		case <-done:
+		case <-ch:
+			log.Info("termination signal")
+			componentManager.Shutdown()
+			<-done
 		}
 	},
 }

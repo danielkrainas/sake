@@ -6,31 +6,52 @@
 package factory
 
 import (
+	"context"
 	"github.com/danielkrainas/sake/pkg/service"
 )
 
 // Injectors from wire.go:
 
-func Coordinator(ctx RootContext, config *service.Config) (service.CoordinatorService, error) {
-	context, err := InitializeLoggingContext(ctx, config)
+func Coordinator(ctx context.Context, config *service.Config) (service.CoordinatorService, error) {
+	hubConnector, err := InitializeHub(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-	hubConnector, err := InitializeHub(context, config)
+	storageService, err := InitializeStorage(ctx, config)
 	if err != nil {
 		return nil, err
 	}
-	storageService, err := InitializeStorage(context, config)
+	cacheService, err := InitializeCache(ctx, config, storageService)
 	if err != nil {
 		return nil, err
 	}
-	cacheService, err := InitializeCache(context, config, storageService)
-	if err != nil {
-		return nil, err
-	}
-	coordinatorService, err := InitializeCoordinator(context, hubConnector, storageService, cacheService)
+	coordinatorService, err := InitializeCoordinator(ctx, hubConnector, storageService, cacheService)
 	if err != nil {
 		return nil, err
 	}
 	return coordinatorService, nil
+}
+
+func ComponentManagerWithCoordinator(ctx context.Context, config *service.Config) (*service.ComponentManager, error) {
+	hubConnector, err := InitializeHub(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	storageService, err := InitializeStorage(ctx, config)
+	if err != nil {
+		return nil, err
+	}
+	cacheService, err := InitializeCache(ctx, config, storageService)
+	if err != nil {
+		return nil, err
+	}
+	coordinatorService, err := InitializeCoordinator(ctx, hubConnector, storageService, cacheService)
+	if err != nil {
+		return nil, err
+	}
+	componentManager, err := InitializeComponentManager(ctx, coordinatorService)
+	if err != nil {
+		return nil, err
+	}
+	return componentManager, nil
 }
