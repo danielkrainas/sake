@@ -1,29 +1,22 @@
-# Sake: a saga coordinator
+# Sake: a saga orchestration engine
 
-Sake is an orchestration service that handles the execution, interpretation, and recovery of distributed sagas in a microservice environment.
+Sake is an orchestration service that handles the execution, state management, and recovery of distributed sagas in a microservice environment.
 
-TODO!!!!
-Amazingly, a distributed saga guarantees one of the following two outcomes:
+### Overview
 
-Either all Requests in the Saga are succesfully completed, or
-A subset of Requests and their Compensating Requests are executed.
+The engine connects to a messaging service (currently nats-streaming only) and listens to workflow trigger topics to then begin a transaction. The transaction will either complete all requests in its workflow successfully or a subset of requests and their compensating requests will be executed.
 
 ## Installation
 
 
-NATS straming
 ```sh
-docker run --name dev-nats-streaming --restart unless-stopped -d -p 4222:4222 -p 8222:8222 nats-streaming
-```
-
-```sh
-go get github.com/danielkrainas/sake
+go get -u github.com/danielkrainas/sake
 ```
 
 ## Usage
 
 ```sh
-sake run -c <config_path>
+sake coordinator -c <config_path>
 ```
 
 ## Project Status
