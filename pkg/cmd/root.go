@@ -18,8 +18,8 @@ var rootContext context.Context
 
 var rootCmd = &cobra.Command{
 	Use:   "sake",
-	Short: "sake",
-	Long:  "sake",
+	Short: "sake - light-weight saga orchestration for microservice and cloud-native environments",
+	Long:  "sake - light-weight saga orchestration for microservice and cloud-native environments",
 }
 
 func Execute(ctx context.Context) {
