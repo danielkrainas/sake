@@ -4,8 +4,8 @@ import "github.com/gorilla/mux"
 
 const (
 	RouteNameBase      = "base"
-	RouteNameWorkflows = "workflows"
-	RouteNameWorkflow  = "workflow"
+	RouteNameRecipes = "recipes"
+	RouteNameRecipe  = "recipe"
 )
 
 func Router() *mux.Router {

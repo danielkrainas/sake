@@ -2,8 +2,8 @@ package service
 
 import "go.uber.org/zap"
 
-func WorkflowField(wf *Workflow) zap.Field {
-	return zap.String("workflow", wf.Name)
+func RecipeField(recipe *Recipe) zap.Field {
+	return zap.String("recipe", recipe.Name)
 }
 
 func TransactionFields(trx *Transaction, others ...zap.Field) []zap.Field {

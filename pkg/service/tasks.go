@@ -8,10 +8,10 @@ func (task *ExpirationTriggerTask) RunTask() error {
 	return task.Coordinator.UpdateExpired()
 }
 
-type WorkflowCleanupTask struct {
+type RecipeCleanupTask struct {
 	Coordinator CoordinatorService
 }
 
-func (task *WorkflowCleanupTask) RunTask() error {
+func (task *RecipeCleanupTask) RunTask() error {
 	return task.Coordinator.ClearInactive()
 }

@@ -17,15 +17,15 @@ type Stage struct {
 	Terminate       bool          `json:"terminate,omitempty"`
 }
 
-type WorkflowStatus int32
+type RecipeStatus int32
 
 const (
-	StatusInactive WorkflowStatus = 0
-	StatusActive                  = 1
-	StatusDraining                = 2
+	StatusInactive RecipeStatus = 0
+	StatusActive                = 1
+	StatusDraining              = 2
 )
 
-type Workflow struct {
+type Recipe struct {
 	ID                    string            `json:"id"`
 	Name                  string            `json:"name"`
 	TriggeredBy           string            `json:"trigger"`
@@ -35,16 +35,16 @@ type Workflow struct {
 	StatusCode            int32             `json:"status"`
 }
 
-func (wf *Workflow) SetStatus(status WorkflowStatus) {
-	atomic.StoreInt32(&wf.StatusCode, int32(status))
+func (recipe *Recipe) SetStatus(status RecipeStatus) {
+	atomic.StoreInt32(&recipe.StatusCode, int32(status))
 }
 
-func (wf *Workflow) SetStatusCond(newStatus WorkflowStatus, currentStatus WorkflowStatus) bool {
-	return atomic.CompareAndSwapInt32(&wf.StatusCode, int32(currentStatus), int32(newStatus))
+func (recipe *Recipe) SetStatusCond(newStatus RecipeStatus, currentStatus RecipeStatus) bool {
+	return atomic.CompareAndSwapInt32(&recipe.StatusCode, int32(currentStatus), int32(newStatus))
 }
 
-func (wf *Workflow) Status() WorkflowStatus {
-	return WorkflowStatus(atomic.LoadInt32(&wf.StatusCode))
+func (recipe *Recipe) Status() RecipeStatus {
+	return RecipeStatus(atomic.LoadInt32(&recipe.StatusCode))
 }
 
 type TransactionState string
@@ -68,11 +68,11 @@ type Transaction struct {
 	StageStarted time.Time
 	Started      time.Time
 	Expires      *time.Time
-	Workflow     *Workflow
+	Recipe       *Recipe
 	ExecutedPath []string
 }
 
-func NewTransaction(wf *Workflow, data []byte) *Transaction {
+func NewTransaction(recipe *Recipe, data []byte) *Transaction {
 	trx := &Transaction{
 		ID:           token.Generate(),
 		State:        IsInitializing,
@@ -83,7 +83,7 @@ func NewTransaction(wf *Workflow, data []byte) *Transaction {
 		StageStarted: time.Unix(0, 0),
 		Started:      time.Now(),
 		Expires:      nil,
-		Workflow:     wf,
+		Recipe:       recipe,
 	}
 
 	return trx
@@ -105,7 +105,7 @@ func (trx *Transaction) Step() {
 	var stageKey string
 	done := false
 	if trx.State == IsInitializing {
-		stageKey = trx.Workflow.StartAt
+		stageKey = trx.Recipe.StartAt
 		trx.State = IsExecuting
 		trx.ExecutedPath = []string{stageKey}
 	} else if trx.State == IsExecuting {
@@ -125,7 +125,7 @@ func (trx *Transaction) Step() {
 	}
 
 	if !done {
-		stage := trx.Workflow.Stages[stageKey]
+		stage := trx.Recipe.Stages[stageKey]
 		trx.StageKey = stageKey
 		trx.Stage = stage
 		trx.StageTopic = stageKey

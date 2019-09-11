@@ -16,9 +16,9 @@ var (
 		HTTPStatusCode: http.StatusBadRequest,
 	})
 
-	ErrorCodeWorkflowMultiModify = errcode.Register(ErrorGroup, errcode.ErrorDescriptor{
+	ErrorCodeRecipeMultiModify = errcode.Register(ErrorGroup, errcode.ErrorDescriptor{
 		Value:          "WORKFLOW_MULTI_MODIFY",
-		Message:        "two or more requests attempted to modify the %q workflow. please retry the request",
+		Message:        "two or more requests attempted to modify the %q recipe. please retry the request",
 		Description:    "",
 		HTTPStatusCode: http.StatusBadRequest,
 	})

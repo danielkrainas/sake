@@ -8,14 +8,14 @@ import (
 )
 
 type CacheService interface {
-	PutWorkflow(ctx context.Context, wf *Workflow) error
-	GetAllWorkflows(ctx context.Context) ([]*Workflow, error)
-	RemoveWorkflow(ctx context.Context, wf *Workflow) error
+	PutRecipe(ctx context.Context, recipe *Recipe) error
+	GetAllRecipes(ctx context.Context) ([]*Recipe, error)
+	RemoveRecipe(ctx context.Context, recipe *Recipe) error
 	PutTransaction(ctx context.Context, trx *Transaction) error
 	GetTransaction(ctx context.Context, id string) (*Transaction, error)
 	RemoveTransaction(ctx context.Context, trx *Transaction) error
 	TransactAll(ctx context.Context, action func(trx *Transaction) error) error
-	FilterWorkflows(ctx context.Context, predicate func(wf *Workflow) (bool, error)) ([]*Workflow, error)
+	FilterRecipes(ctx context.Context, predicate func(recipe *Recipe) (bool, error)) ([]*Recipe, error)
 }
 
 type WriteThruCache struct {
@@ -25,14 +25,14 @@ type WriteThruCache struct {
 
 var _ CacheService = &WriteThruCache{}
 
-func (thru *WriteThruCache) RemoveWorkflow(ctx context.Context, wf *Workflow) error {
-	go func(wf *Workflow) {
-		if err := thru.Storage.RemoveWorkflow(ctx, wf); err != nil {
+func (thru *WriteThruCache) RemoveRecipe(ctx context.Context, recipe *Recipe) error {
+	go func(recipe *Recipe) {
+		if err := thru.Storage.RemoveRecipe(ctx, recipe); err != nil {
 			//
 		}
-	}(wf)
+	}(recipe)
 
-	return thru.CacheService.RemoveWorkflow(ctx, wf)
+	return thru.CacheService.RemoveRecipe(ctx, recipe)
 }
 
 func (thru *WriteThruCache) PutTransaction(ctx context.Context, trx *Transaction) error {
@@ -45,14 +45,14 @@ func (thru *WriteThruCache) PutTransaction(ctx context.Context, trx *Transaction
 	return thru.CacheService.PutTransaction(ctx, trx)
 }
 
-func (thru *WriteThruCache) PutWorkflow(ctx context.Context, wf *Workflow) error {
-	go func(wf *Workflow) {
-		if err := thru.Storage.SaveWorkflow(ctx, wf); err != nil {
+func (thru *WriteThruCache) PutRecipe(ctx context.Context, recipe *Recipe) error {
+	go func(recipe *Recipe) {
+		if err := thru.Storage.SaveRecipe(ctx, recipe); err != nil {
 			//
 		}
-	}(wf)
+	}(recipe)
 
-	return thru.CacheService.PutWorkflow(ctx, wf)
+	return thru.CacheService.PutRecipe(ctx, recipe)
 }
 
 type InMemoryCache struct {
@@ -64,8 +64,8 @@ var _ CacheService = &InMemoryCache{}
 func NewInMemoryCache() (*InMemoryCache, error) {
 	schema := &memdb.DBSchema{
 		Tables: map[string]*memdb.TableSchema{
-			"workflow": &memdb.TableSchema{
-				Name: "workflow",
+			"recipe": &memdb.TableSchema{
+				Name: "recipe",
 				Indexes: map[string]*memdb.IndexSchema{
 					"id": &memdb.IndexSchema{
 						Name:    "id",
@@ -98,9 +98,9 @@ func NewInMemoryCache() (*InMemoryCache, error) {
 	}, nil
 }
 
-func (cache *InMemoryCache) PutWorkflow(ctx context.Context, wf *Workflow) error {
+func (cache *InMemoryCache) PutRecipe(ctx context.Context, recipe *Recipe) error {
 	transact := cache.db.Txn(true)
-	if err := transact.Insert("workflow", wf); err != nil {
+	if err := transact.Insert("recipe", recipe); err != nil {
 		transact.Abort()
 		return err
 	}
@@ -109,30 +109,30 @@ func (cache *InMemoryCache) PutWorkflow(ctx context.Context, wf *Workflow) error
 	return nil
 }
 
-func (cache *InMemoryCache) GetAllWorkflows(ctx context.Context) ([]*Workflow, error) {
-	result := make([]*Workflow, 0)
+func (cache *InMemoryCache) GetAllRecipes(ctx context.Context) ([]*Recipe, error) {
+	result := make([]*Recipe, 0)
 	transact := cache.db.Txn(false)
 	defer transact.Abort()
-	it, err := transact.Get("workflow", "id")
+	it, err := transact.Get("recipe", "id")
 	if err != nil {
 		return nil, err
 	}
 
 	for obj := it.Next(); obj != nil; obj = it.Next() {
-		wf, ok := obj.(*Workflow)
+		recipe, ok := obj.(*Recipe)
 		if ok {
-			result = append(result, wf)
+			result = append(result, recipe)
 		}
 	}
 
 	return result, nil
 }
 
-func (cache *InMemoryCache) RemoveWorkflow(ctx context.Context, wf *Workflow) error {
+func (cache *InMemoryCache) RemoveRecipe(ctx context.Context, recipe *Recipe) error {
 	transact := cache.db.Txn(true)
-	iwf, err := transact.First("workflow", "id", wf.ID)
-	if err == nil && iwf != nil {
-		err = transact.Delete("workflow", iwf)
+	irecipe, err := transact.First("recipe", "id", recipe.ID)
+	if err == nil && irecipe != nil {
+		err = transact.Delete("recipe", irecipe)
 	}
 
 	if err != nil {
@@ -208,23 +208,23 @@ func (cache *InMemoryCache) TransactAll(ctx context.Context, action func(trx *Tr
 	return nil
 }
 
-func (cache *InMemoryCache) FilterWorkflows(ctx context.Context, predicate func(wf *Workflow) (bool, error)) ([]*Workflow, error) {
-	result := make([]*Workflow, 0)
+func (cache *InMemoryCache) FilterRecipes(ctx context.Context, predicate func(recipe *Recipe) (bool, error)) ([]*Recipe, error) {
+	result := make([]*Recipe, 0)
 	transact := cache.db.Txn(false)
 	defer transact.Abort()
-	it, err := transact.Get("workflow", "id")
+	it, err := transact.Get("recipe", "id")
 	if err != nil {
 		return nil, err
 	}
 
 	for obj := it.Next(); obj != nil; obj = it.Next() {
-		wf, ok := obj.(*Workflow)
+		recipe, ok := obj.(*Recipe)
 		if ok {
-			match, err := predicate(wf)
+			match, err := predicate(recipe)
 			if err != nil {
 				return nil, err
 			} else if match {
-				result = append(result, wf)
+				result = append(result, recipe)
 			}
 		}
 	}

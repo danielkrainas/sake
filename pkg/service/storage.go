@@ -9,9 +9,9 @@ import (
 
 type StorageService interface {
 	SaveTransaction(ctx context.Context, trx *Transaction) error
-	SaveWorkflow(ctx context.Context, wf *Workflow) error
-	RemoveWorkflow(ctx context.Context, wf *Workflow) error
-	LoadAllWorkflows(ctx context.Context) ([]*Workflow, error)
+	SaveRecipe(ctx context.Context, recipe *Recipe) error
+	RemoveRecipe(ctx context.Context, recipe *Recipe) error
+	LoadAllRecipes(ctx context.Context) ([]*Recipe, error)
 	LoadActiveTransactions(ctx context.Context) ([]*Transaction, error)
 }
 
@@ -21,11 +21,11 @@ type DebugStorage struct {
 
 var _ StorageService = &DebugStorage{}
 
-func NewDebugStorage(workflows []*Workflow, transactions []*Transaction) (*DebugStorage, error) {
+func NewDebugStorage(recipes []*Recipe, transactions []*Transaction) (*DebugStorage, error) {
 	schema := &memdb.DBSchema{
 		Tables: map[string]*memdb.TableSchema{
-			"workflow": &memdb.TableSchema{
-				Name: "workflow",
+			"recipe": &memdb.TableSchema{
+				Name: "recipe",
 				Indexes: map[string]*memdb.IndexSchema{
 					"id": &memdb.IndexSchema{
 						Name:    "id",
@@ -57,9 +57,9 @@ func NewDebugStorage(workflows []*Workflow, transactions []*Transaction) (*Debug
 	}
 
 	txn := db.Txn(true)
-	for _, wf := range workflows {
-		log.Info("pre-inserting workflow", WorkflowField(wf))
-		if err := txn.Insert("workflow", wf); err != nil {
+	for _, wf := range recipes {
+		log.Info("pre-inserting recipe", RecipeField(wf))
+		if err := txn.Insert("recipe", wf); err != nil {
 			return nil, err
 		}
 	}
@@ -87,9 +87,9 @@ func (storage *DebugStorage) SaveTransaction(ctx context.Context, trx *Transacti
 	return nil
 }
 
-func (storage *DebugStorage) SaveWorkflow(ctx context.Context, wf *Workflow) error {
+func (storage *DebugStorage) SaveRecipe(ctx context.Context, recipe *Recipe) error {
 	transact := storage.db.Txn(true)
-	if err := transact.Insert("workflow", wf); err != nil {
+	if err := transact.Insert("recipe", recipe); err != nil {
 		transact.Abort()
 		return err
 	}
@@ -98,17 +98,17 @@ func (storage *DebugStorage) SaveWorkflow(ctx context.Context, wf *Workflow) err
 	return nil
 }
 
-func (storage *DebugStorage) LoadAllWorkflows(ctx context.Context) ([]*Workflow, error) {
-	result := make([]*Workflow, 0)
+func (storage *DebugStorage) LoadAllRecipes(ctx context.Context) ([]*Recipe, error) {
+	result := make([]*Recipe, 0)
 	transact := storage.db.Txn(false)
-	it, err := transact.Get("workflow", "id")
+	it, err := transact.Get("recipe", "id")
 	if err != nil {
 		transact.Abort()
 		return nil, err
 	}
 
 	for obj := it.Next(); obj != nil; obj = it.Next() {
-		wf := obj.(*Workflow)
+		wf := obj.(*Recipe)
 		result = append(result, wf)
 	}
 
@@ -134,11 +134,11 @@ func (storage *DebugStorage) LoadActiveTransactions(ctx context.Context) ([]*Tra
 	return result, nil
 }
 
-func (storage *DebugStorage) RemoveWorkflow(ctx context.Context, wf *Workflow) error {
+func (storage *DebugStorage) RemoveRecipe(ctx context.Context, recipe *Recipe) error {
 	transact := storage.db.Txn(true)
-	iwf, err := transact.First("workflow", "id", wf.Name)
+	iwf, err := transact.First("recipe", "id", recipe.Name)
 	if err == nil && iwf != nil {
-		err = transact.Delete("workflow", iwf)
+		err = transact.Delete("recipe", iwf)
 	}
 
 	if err != nil {

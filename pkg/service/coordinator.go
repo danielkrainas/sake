@@ -16,10 +16,10 @@ import (
 
 type CoordinatorService interface {
 	Component
-	Register(wf *Workflow) error
+	Register(recipe *Recipe) error
 	UpdateExpired() error
 	ClearInactive() error
-	UnloadWorkflow(name string) (bool, error)
+	UnloadRecipe(name string) (bool, error)
 }
 
 type Coordinator struct {
@@ -39,16 +39,16 @@ func NewCoordinator(ctx context.Context, hub HubConnector, cache CacheService, s
 	}
 
 	c.readyWaitGroup.Add(1)
-	log.Info("loading stored workflows")
-	workflows, err := storage.LoadAllWorkflows(ctx)
+	log.Info("loading stored recipes")
+	recipes, err := storage.LoadAllRecipes(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("couldn't load workflows: %v", err)
+		return nil, fmt.Errorf("couldn't load recipes: %v", err)
 	}
 
-	log.Info("registering workflows", zap.Int("count", len(workflows)))
-	for _, wf := range workflows {
-		if err := c.Register(wf); err != nil {
-			return nil, fmt.Errorf("registering workflow %q failed: %v", wf.Name, err)
+	log.Info("registering recipes", zap.Int("count", len(recipes)))
+	for _, recipe := range recipes {
+		if err := c.Register(recipe); err != nil {
+			return nil, fmt.Errorf("registering recipe %q failed: %v", recipe.Name, err)
 		}
 	}
 
@@ -91,58 +91,58 @@ func (c *Coordinator) shutdown() error {
 	return nil
 }
 
-func (c *Coordinator) UnloadWorkflow(name string) (bool, error) {
+func (c *Coordinator) UnloadRecipe(name string) (bool, error) {
 	found := false
-	wfs, err := c.Cache.FilterWorkflows(c.Context, func(wf *Workflow) (bool, error) {
-		return wf.Name == name && wf.Status() == StatusActive, nil
+	recipes, err := c.Cache.FilterRecipes(c.Context, func(recipe *Recipe) (bool, error) {
+		return recipe.Name == name && recipe.Status() == StatusActive, nil
 	})
 
 	if err != nil {
 		return found, err
-	} else if len(wfs) < 1 {
+	} else if len(recipes) < 1 {
 		return found, nil
 	}
 
-	wf := wfs[0]
+	recipe := recipes[0]
 	found = true
-	log.Info("draining workflow", zap.String("id", wf.ID), WorkflowField(wf))
-	if ok := wf.SetStatusCond(StatusDraining, StatusActive); !ok {
-		return found, v1.ErrorCodeWorkflowMultiModify.WithArgs(wf.Name)
+	log.Info("draining recipe", zap.String("id", recipe.ID), RecipeField(recipe))
+	if ok := recipe.SetStatusCond(StatusDraining, StatusActive); !ok {
+		return found, v1.ErrorCodeRecipeMultiModify.WithArgs(recipe.Name)
 	}
 
-	if err := c.Hub.CancelGroup(wf.ID); err != nil {
+	if err := c.Hub.CancelGroup(recipe.ID); err != nil {
 		return found, err
 	}
 
-	return found, c.Cache.PutWorkflow(c.Context, wf)
+	return found, c.Cache.PutRecipe(c.Context, recipe)
 }
 
-func (c *Coordinator) Register(wf *Workflow) error {
-	wf.NumActiveTransactions = 0
-	if wf.ID == "" {
-		wf.ID = uid.Generate()
-		wf.SetStatus(StatusActive)
+func (c *Coordinator) Register(recipe *Recipe) error {
+	recipe.NumActiveTransactions = 0
+	if recipe.ID == "" {
+		recipe.ID = uid.Generate()
+		recipe.SetStatus(StatusActive)
 	}
 
-	upgraded, err := c.UnloadWorkflow(wf.Name)
+	upgraded, err := c.UnloadRecipe(recipe.Name)
 	if err != nil {
 		return err
 	}
 
-	if err := c.Cache.PutWorkflow(c.Context, wf); err != nil {
+	if err := c.Cache.PutRecipe(c.Context, recipe); err != nil {
 		return err
 	}
 
-	if wf.Status() == StatusActive {
-		err = c.Hub.SubGroup(wf.ID, RawGroup{
-			wf.TriggeredBy: c.createWorkflowTriggerHandler(wf),
+	if recipe.Status() == StatusActive {
+		err = c.Hub.SubGroup(recipe.ID, RawGroup{
+			recipe.TriggeredBy: c.createRecipeTriggerHandler(recipe),
 		})
 
 		if err == nil {
 			if upgraded {
-				log.Info("workflow upgraded", WorkflowField(wf))
+				log.Info("recipe upgraded", RecipeField(recipe))
 			} else {
-				log.Info("workflow registered", WorkflowField(wf))
+				log.Info("recipe registered", RecipeField(recipe))
 			}
 		}
 	}
@@ -151,25 +151,25 @@ func (c *Coordinator) Register(wf *Workflow) error {
 }
 
 func (c *Coordinator) ClearInactive() error {
-	wfs, err := c.Cache.FilterWorkflows(c.Context, func(wf *Workflow) (bool, error) {
-		return wf.Status() != StatusActive, nil
+	wfs, err := c.Cache.FilterRecipes(c.Context, func(recipe *Recipe) (bool, error) {
+		return recipe.Status() != StatusActive, nil
 	})
 
 	if err != nil {
 		return err
 	}
 
-	for _, wf := range wfs {
-		if wf.Status() == StatusDraining && atomic.LoadInt32(&wf.NumActiveTransactions) < 1 {
-			wf.SetStatus(StatusInactive)
-			log.Debug("workflow drained", WorkflowField(wf))
-			if err := c.Cache.PutWorkflow(c.Context, wf); err != nil {
+	for _, recipe := range wfs {
+		if recipe.Status() == StatusDraining && atomic.LoadInt32(&recipe.NumActiveTransactions) < 1 {
+			recipe.SetStatus(StatusInactive)
+			log.Debug("recipe drained", RecipeField(recipe))
+			if err := c.Cache.PutRecipe(c.Context, recipe); err != nil {
 				return err
 			}
 		}
 
-		log.Debug("unloading inactive workflow", WorkflowField(wf))
-		if err := c.Cache.RemoveWorkflow(c.Context, wf); err != nil {
+		log.Debug("unloading inactive recipe", RecipeField(recipe))
+		if err := c.Cache.RemoveRecipe(c.Context, recipe); err != nil {
 			return err
 		}
 	}
@@ -209,16 +209,16 @@ func (c *Coordinator) UpdateExpired() error {
 	return err
 }
 
-func (c *Coordinator) createWorkflowTriggerHandler(wf *Workflow) func([]byte) error {
+func (c *Coordinator) createRecipeTriggerHandler(recipe *Recipe) func([]byte) error {
 	return func(data []byte) error {
-		if wf.Status() != StatusActive {
-			log.Error("inactive workflow trigger handler still subscribed", WorkflowField(wf))
-			return fmt.Errorf("workflow %q (id=%s) is inactive", wf.Name, wf.ID)
+		if recipe.Status() != StatusActive {
+			log.Error("inactive recipe trigger handler still subscribed", RecipeField(recipe))
+			return fmt.Errorf("recipe %q (id=%s) is inactive", recipe.Name, recipe.ID)
 		}
 
-		atomic.AddInt32(&wf.NumActiveTransactions, 1)
-		trx := NewTransaction(wf, nil)
-		log.Info("start transaction", log.Combine(WorkflowField(wf), TransactionFields(trx)...)...)
+		atomic.AddInt32(&recipe.NumActiveTransactions, 1)
+		trx := NewTransaction(recipe, nil)
+		log.Info("start transaction", log.Combine(RecipeField(recipe), TransactionFields(trx)...)...)
 		trx.Lock()
 		defer trx.Unlock()
 		if err := c.transition(trx); err != nil {
@@ -317,7 +317,7 @@ func (c *Coordinator) transition(trx *Transaction) error {
 
 		c.Hub.Pub(trx.StageTopic, req)
 	} else {
-		atomic.AddInt32(&trx.Workflow.NumActiveTransactions, -1)
+		atomic.AddInt32(&trx.Recipe.NumActiveTransactions, -1)
 		log.Info("completed transaction", TransactionFields(trx)...)
 		if err := c.unload(trx); err != nil {
 			return err

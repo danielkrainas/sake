@@ -40,8 +40,8 @@ var API = struct {
 
 var routeDescriptors = []Route{
 	{"/v1", RouteNameBase},
-	{"/v1/workflows", RouteNameWorkflows},
-	{"/v1/workflows/{name}", RouteNameWorkflow},
+	{"/v1/recipes", RouteNameRecipes},
+	{"/v1/recipes/{name}", RouteNameRecipe},
 }
 
 var APIDescriptor map[string]Route

@@ -25,8 +25,8 @@ func NewMux() (*Mux, error) {
 
 	api.register(v1.RouteNameBase, http.HandlerFunc(baseHandler))
 	mappings := map[string]func() HttpHandler{
-		v1.RouteNameWorkflows: WorkflowsAPI,
-		v1.RouteNameWorkflow:  WorkflowAPI,
+		v1.RouteNameRecipes: RecipesAPI,
+		v1.RouteNameRecipe:  RecipeAPI,
 	}
 
 	for routeName, dispatchFactory := range mappings {

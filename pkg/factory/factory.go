@@ -19,7 +19,7 @@ func InitializeComponentManager(ctx context.Context, coordinator service.Coordin
 			Coordinator: coordinator,
 		}))
 
-		cm.MustUse(service.NewTaskComponent("workflow_cleanup", 10*time.Second, zapcore.InfoLevel, &service.WorkflowCleanupTask{
+		cm.MustUse(service.NewTaskComponent("recipe_cleanup", 10*time.Second, zapcore.InfoLevel, &service.RecipeCleanupTask{
 			Coordinator: coordinator,
 		}))
 
@@ -59,7 +59,7 @@ func InitializeHub(ctx context.Context, config *service.Config) (service.HubConn
 }
 
 func InitializeStorage(ctx context.Context, config *service.Config) (service.StorageService, error) {
-	storage, err := service.NewDebugStorage([]*service.Workflow{service.Workflows[1]}, nil)
+	storage, err := service.NewDebugStorage([]*service.Recipe{service.Recipes[1]}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("storage init failed: %v", err)
 	}

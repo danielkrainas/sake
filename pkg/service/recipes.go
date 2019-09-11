@@ -2,7 +2,7 @@ package service
 
 import "time"
 
-var Workflows = []*Workflow{
+var Recipes = []*Recipe{
 	{
 		Name:        "Test Flow",
 		TriggeredBy: "init-start",

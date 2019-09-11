@@ -8,21 +8,21 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func WorkflowsAPI() HttpHandler {
+func RecipesAPI() HttpHandler {
 	return MethodRouter(map[string]HttpHandler{
-		http.MethodGet:  GetAllWorkflows,
-		http.MethodPost: CreateWorkflow,
+		http.MethodGet:  GetAllRecipes,
+		http.MethodPost: CreateRecipe,
 	})
 }
 
-func WorkflowAPI() HttpHandler {
+func RecipeAPI() HttpHandler {
 	return MethodRouter(map[string]HttpHandler{
-		http.MethodDelete: RemoveWorkflow,
+		http.MethodDelete: RemoveRecipe,
 	})
 }
 
-func GetAllWorkflows(ctx *RequestContext, w http.ResponseWriter, r *http.Request) {
-	wfs, err := ctx.Cache.GetAllWorkflows(r.Context())
+func GetAllRecipes(ctx *RequestContext, w http.ResponseWriter, r *http.Request) {
+	wfs, err := ctx.Cache.GetAllRecipes(r.Context())
 	if err != nil {
 		SendError(ctx, err)
 	} else {
@@ -30,8 +30,8 @@ func GetAllWorkflows(ctx *RequestContext, w http.ResponseWriter, r *http.Request
 	}
 }
 
-func CreateWorkflow(ctx *RequestContext, w http.ResponseWriter, r *http.Request) {
-	wf := &service.Workflow{}
+func CreateRecipe(ctx *RequestContext, w http.ResponseWriter, r *http.Request) {
+	wf := &service.Recipe{}
 	if !ParseAndValidate(ctx, r, wf) {
 		return
 	}
@@ -43,13 +43,13 @@ func CreateWorkflow(ctx *RequestContext, w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func RemoveWorkflow(ctx *RequestContext, w http.ResponseWriter, r *http.Request) {
+func RemoveRecipe(ctx *RequestContext, w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	name, ok := vars["name"]
 	if !ok || name == "" {
 		SendError(ctx, v1.ErrorCodeRequestInvalid.WithDetail("url name parameter missing or invalid"))
 	} else {
-		if _, err := ctx.Coordinator.UnloadWorkflow(name); err != nil {
+		if _, err := ctx.Coordinator.UnloadRecipe(name); err != nil {
 			SendError(ctx, err)
 		} else {
 			w.WriteHeader(http.StatusNoContent)
