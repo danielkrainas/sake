@@ -4,7 +4,7 @@ Sake is an orchestration service that handles the execution, state management, a
 
 ### Overview
 
-The engine connects to a messaging service (currently nats-streaming only) and listens to workflow trigger topics to then begin a transaction. The transaction will either complete all requests in its workflow successfully or a subset of requests and their compensating requests will be executed.
+The engine connects to a messaging service (currently nats-streaming only) and listens to recipe trigger topics to then begin a transaction. The transaction will either complete all requests in the recipe successfully or a subset of requests and their compensating requests will be executed.
 
 ## Installation
 
