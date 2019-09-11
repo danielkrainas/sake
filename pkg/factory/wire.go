@@ -8,6 +8,6 @@ import (
 )
 
 func Coordinator(ctx RootContext, config *service.Config) (service.CoordinatorService, error) {
-	wire.Build(InitializeCoordinator, InitializeHub, InitializeLoggingContext)
+	wire.Build(InitializeCoordinator, InitializeCache, InitializeStorage, InitializeHub, InitializeLoggingContext)
 	return &service.Coordinator{}, nil
 }

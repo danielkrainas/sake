@@ -1,9 +1,12 @@
 storage = ""
 
 [log]
-level = "info"
-formatter = "text"
+  level = "info"
+  formatter = "text"
 
 [http]
-debug = false
-addr = ":8889"
+  debug = false
+  addr = ":8889"
+
+[nats]
+  servers = [""]

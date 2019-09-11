@@ -1,5 +1,7 @@
 package service
 
+import "time"
+
 var Workflows = []*Workflow{
 	{
 		Name:        "Test Flow",
@@ -29,6 +31,7 @@ var Workflows = []*Workflow{
 			"middle": &Stage{
 				Next:     "end",
 				Rollback: "cancel-middle",
+				Timeout:  2 * time.Second,
 			},
 
 			"end": &Stage{

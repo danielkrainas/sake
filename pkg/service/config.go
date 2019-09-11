@@ -23,7 +23,15 @@ type Config struct {
 		Addr string `yaml:"addr" toml:"addr" env:"SAKE_HTTP_ADDR"`
 	} `yaml:"http" toml:"http"`
 
+	Nats struct {
+		ClusterID   string `yaml:"cluster" toml:"cluster" env:"SAKE_NATS_CLUSTER"`
+		Server      string `yaml:"server" toml:"server" env:"SAKE_NATS_SERVER"`
+		ClientID    string `yaml:"client_id" toml:"client_id" env:"SAKE_NATS_CLIENT_ID"`
+		DurableName string `yaml:"durable_name" toml:"durable_name" env:"SAKE_NATS_DURABLE_NAME"`
+	} `yaml:"nats" toml:"nats"`
+
 	StorageDriver string `yaml:"storage" toml:"storage" env:"SAKE_STORAGE"`
+	HubProvider   string `yaml:"hub" toml:"hub" env:"SAKE_HUB"`
 }
 
 func DefaultConfig() *Config {
@@ -32,6 +40,7 @@ func DefaultConfig() *Config {
 	config.Log.Level = "debug"
 	config.Log.Formatter = "text"
 	config.StorageDriver = ""
+	config.HubProvider = "in-memory"
 
 	return config
 }

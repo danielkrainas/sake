@@ -16,11 +16,19 @@ func Coordinator(ctx RootContext, config *service.Config) (service.CoordinatorSe
 	if err != nil {
 		return nil, err
 	}
-	hubConnector, err := InitializeHub(context)
+	hubConnector, err := InitializeHub(context, config)
 	if err != nil {
 		return nil, err
 	}
-	coordinatorService, err := InitializeCoordinator(context, hubConnector)
+	storageService, err := InitializeStorage(context, config)
+	if err != nil {
+		return nil, err
+	}
+	cacheService, err := InitializeCache(context, config, storageService)
+	if err != nil {
+		return nil, err
+	}
+	coordinatorService, err := InitializeCoordinator(context, hubConnector, storageService, cacheService)
 	if err != nil {
 		return nil, err
 	}

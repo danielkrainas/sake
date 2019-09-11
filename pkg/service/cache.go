@@ -14,7 +14,7 @@ type CacheService interface {
 	PutTransaction(ctx context.Context, trx *Transaction) error
 	GetTransaction(ctx context.Context, id string) (*Transaction, error)
 	RemoveTransaction(ctx context.Context, trx *Transaction) error
-	TransactAll(ctx context.Context, action func(trx *Transaction) (*Transaction, error)) error
+	TransactAll(ctx context.Context, action func(trx *Transaction) error) error
 }
 
 type WriteThruCache struct {
@@ -179,23 +179,22 @@ func (cache *InMemoryCache) RemoveTransaction(ctx context.Context, trx *Transact
 	return nil
 }
 
-func (cache *InMemoryCache) TransactAll(ctx context.Context, action func(trx *Transaction) (*Transaction, error)) error {
-	transact := cache.db.Txn(true)
+func (cache *InMemoryCache) TransactAll(ctx context.Context, action func(trx *Transaction) error) error {
+	transact := cache.db.Txn(false)
+	defer transact.Abort()
 	it, err := transact.Get("transaction", "id")
 	if err != nil {
-		transact.Abort()
 		return err
 	}
 
 	for obj := it.Next(); obj != nil; obj = it.Next() {
 		trx := obj.(*Transaction)
-		updated, err := action(trx)
-		if updated != nil && err == nil {
+		err = action(trx)
+		/*if updated != nil && err == nil {
 			err = transact.Insert("transaction", updated)
-		}
+		}*/
 
 		if err != nil {
-			transact.Abort()
 			return err
 		}
 	}

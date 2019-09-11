@@ -8,6 +8,18 @@
   version = "v0.3.1"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/alecthomas/template"
+  packages = [".","parse"]
+  revision = "fb15b899a75114aa79cc930e33c46b577cc664b1"
+
+[[projects]]
+  branch = "master"
+  name = "github.com/alecthomas/units"
+  packages = ["."]
+  revision = "c3de453c63f4bdb4dadffab9805ec00426c505f7"
+
+[[projects]]
   name = "github.com/caarlos0/env"
   packages = ["."]
   revision = "4bd75bf16b9ef8c1383109b5e4d931bd72c3b6d0"
@@ -30,6 +42,12 @@
   packages = ["."]
   revision = "51d6538a90f86fe93ac480b35f37b2be17fef232"
   version = "v2.2.2"
+
+[[projects]]
+  name = "github.com/gogo/protobuf"
+  packages = ["gogoproto","proto","protoc-gen-gogo/descriptor"]
+  revision = "ba06b47c162d49f2af050fb4c75bcbc86a159d5c"
+  version = "v1.2.1"
 
 [[projects]]
   name = "github.com/golang/protobuf"
@@ -78,6 +96,36 @@
   packages = ["."]
   revision = "f55edac94c9bbba5d6182a4be46d86a2c9b5b50e"
   version = "v1.0.2"
+
+[[projects]]
+  name = "github.com/nats-io/go-nats"
+  packages = [".","encoders/builtin","util"]
+  revision = "70fe06cee50d4b6f98248d9675fb55f2a3aa7228"
+  version = "v1.7.2"
+
+[[projects]]
+  name = "github.com/nats-io/go-nats-streaming"
+  packages = [".","pb"]
+  revision = "7cd94c239033c0405a43454be55a0810d3a3ca89"
+  version = "v0.4.4"
+
+[[projects]]
+  name = "github.com/nats-io/nkeys"
+  packages = ["."]
+  revision = "0073b400419be3ffb022ef46b675805e92534a34"
+  version = "v0.1.0"
+
+[[projects]]
+  name = "github.com/nats-io/nuid"
+  packages = ["."]
+  revision = "4b96681fa6d28dd0ab5fe79bac63b3a493d9ee94"
+  version = "v1.0.1"
+
+[[projects]]
+  name = "github.com/prometheus/common"
+  packages = ["log"]
+  revision = "31bed53e4047fd6c510e43a941f90cb31be0972a"
+  version = "v0.6.0"
 
 [[projects]]
   name = "github.com/segmentio/ksuid"
@@ -129,6 +177,12 @@
 
 [[projects]]
   branch = "master"
+  name = "golang.org/x/crypto"
+  packages = ["ed25519","ed25519/internal/edwards25519"]
+  revision = "60c769a6c58655dab1b9adac0d58967dd517cfba"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/net"
   packages = ["context"]
   revision = "3f473d35a33aa6fdd203e306dc439b797820e3f1"
@@ -136,12 +190,18 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/sys"
-  packages = ["unix"]
+  packages = ["unix","windows","windows/registry","windows/svc/eventlog"]
   revision = "93c9922d18aeb82498a065f07aec7ad7fa60dfb7"
+
+[[projects]]
+  name = "gopkg.in/alecthomas/kingpin.v2"
+  packages = ["."]
+  revision = "947dcec5ba9c011838740e680966fd7087a71d0d"
+  version = "v2.2.6"
 
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "398c60af7c61b542748dcc4a4e20d083d28d4d179b950743312083a45e284ced"
+  inputs-digest = "18b82b0bc958f07d9eee547c44f39584cab33c05a6f7d411ea63e24d991f633a"
   solver-name = "gps-cdcl"
   solver-version = 1

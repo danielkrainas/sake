@@ -18,13 +18,16 @@ type APIServer interface {
 type CoordinatorService interface {
 	Register(wf *Workflow) error
 	UpdateExpired() error
+	Shutdown() error
+	WaitForShutdown() <-chan struct{}
 }
 
 type Coordinator struct {
-	Hub            HubConnector
-	Context        context.Context
-	Cache          CacheService
-	readyWaitGroup sync.WaitGroup
+	Hub               HubConnector
+	Context           context.Context
+	Cache             CacheService
+	readyWaitGroup    sync.WaitGroup
+	shutdownWaitGroup sync.WaitGroup
 }
 
 var _ CoordinatorService = &Coordinator{}
@@ -63,9 +66,36 @@ func NewCoordinator(ctx context.Context, hub HubConnector, cache CacheService, s
 		}
 	}
 
+	go func() {
+		<-ctx.Done()
+		c.Shutdown()
+	}()
+
+	c.shutdownWaitGroup.Add(1)
 	c.readyWaitGroup.Done()
 	log.Info("coordinator ready")
 	return c, nil
+}
+
+func (c *Coordinator) Shutdown() error {
+	log.Warn("coordinator shutting down")
+	if err := c.Hub.CancelAll(); err != nil {
+		log.Warn("failed to cancel all hub subscriptions", zap.Error(err))
+	}
+
+	// shutdown hub
+	// clear cache
+	return nil
+}
+
+func (c *Coordinator) WaitForShutdown() <-chan struct{} {
+	ch := make(chan struct{}, 0)
+	go func() {
+		c.shutdownWaitGroup.Wait()
+		ch <- struct{}{}
+	}()
+
+	return ch
 }
 
 func (c *Coordinator) Register(wf *Workflow) error {
@@ -85,22 +115,35 @@ func (c *Coordinator) Register(wf *Workflow) error {
 }
 
 func (c *Coordinator) UpdateExpired() error {
-	return c.Cache.TransactAll(c.Context, func(trx *Transaction) (*Transaction, error) {
+	n := 0
+	err := c.Cache.TransactAll(c.Context, func(trx *Transaction) error {
+		log.Debug("waiting on transaction lock", TransactionFields(trx)...)
 		trx.Lock()
-		defer trx.Unlock()
+		defer func() {
+			trx.Unlock()
+			log.Debug("unlocked transaction", TransactionFields(trx)...)
+		}()
 
 		if trx.IsExpired() && trx.State == IsExecuting {
+			log.Debug("transaction expired", TransactionFields(trx)...)
 			if err := trx.Commit(false); err != nil {
-				//
+				log.Error("couldn't commit expired transaction", zap.Error(err))
+				return err
 			}
 
 			if err := c.transition(trx); err != nil {
-				//
+				log.Error("couldn't transition expired transaction", zap.Error(err))
+				return err
 			}
+
+			n++
 		}
 
-		return trx, nil
+		return nil
 	})
+
+	log.Info("expired transactions updated", zap.Int("expired", n))
+	return err
 }
 
 func (c *Coordinator) createWorkflowTriggerHandler(wf *Workflow) func([]byte) error {
@@ -133,11 +176,6 @@ func (c *Coordinator) createTransactionSuccessHandler(trx *Transaction) func(*pr
 			return fmt.Errorf("failed to commit reply: %v", err)
 		}
 
-		if err := c.Hub.CancelGroup(trx); err != nil {
-			log.Error("failed to unsubscribe group", log.Combine(zap.Error(err), TransactionFields(trx, zap.String("topic", trx.StageTopic))...)...)
-			return fmt.Errorf("unsubscribing transaction group failed: %v", err)
-		}
-
 		if err := c.transition(trx); err != nil {
 			log.Error("transition failed", log.Combine(zap.Error(err), TransactionFields(trx)...)...)
 			return fmt.Errorf("failed to transition transaction: %v", err)
@@ -155,11 +193,6 @@ func (c *Coordinator) createTransactionFailureHandler(trx *Transaction) func(*pr
 		if err := trx.Commit(false); err != nil {
 			log.Error("commit failed", log.Combine(zap.Error(err), TransactionFields(trx)...)...)
 			return fmt.Errorf("failed to commit reply: %v", err)
-		}
-
-		if err := c.Hub.CancelGroup(trx); err != nil {
-			log.Error("failed to unsubscribe group", log.Combine(zap.Error(err), TransactionFields(trx, zap.String("topic", trx.StageTopic))...)...)
-			return fmt.Errorf("unsubscribing transaction group failed: %v", err)
 		}
 
 		if err := c.transition(trx); err != nil {
@@ -203,8 +236,15 @@ func (c *Coordinator) transition(trx *Transaction) error {
 		}
 
 		log.Debug("dispatch request", log.CombineAll([]zap.Field{zap.String("req", req.ID), zap.String("topic", trx.StageTopic)}, TransactionFields(trx))...)
-		c.Hub.SubReply(trx, successTopic, c.createTransactionSuccessHandler(trx))
-		c.Hub.SubReply(trx, failureTopic, c.createTransactionFailureHandler(trx))
+		finalizer := c.createReplyFinalizer(trx, trx.StageTopic, req.ID)
+		err := c.Hub.SubReply(req.ID, finalizer, ReplyGroup{
+			successTopic: c.createTransactionSuccessHandler(trx),
+			failureTopic: c.createTransactionFailureHandler(trx),
+		})
+
+		if err != nil {
+			log.Error("failed to attach reply subscribers", zap.Error(err))
+		}
 
 		c.Hub.Pub(trx.StageTopic, req)
 	} else {
@@ -217,10 +257,26 @@ func (c *Coordinator) transition(trx *Transaction) error {
 	return nil
 }
 
+func (c *Coordinator) createReplyFinalizer(trx *Transaction, stageTopic string, reqID string) func() {
+	oncer := sync.Once{}
+	return func() {
+		oncer.Do(func() {
+			for {
+				if err := c.Hub.CancelGroup(reqID); err != nil {
+					log.Error("failed to unsubscribe group", log.Combine(zap.Error(err), TransactionFields(trx, zap.String("topic", stageTopic))...)...)
+					continue
+				}
+
+				break
+			}
+		})
+	}
+}
+
 func successReplyAddress(trx *Transaction) string {
-	return fmt.Sprintf("success/%s@%s", trx.ID, trx.StageTopic)
+	return fmt.Sprintf("sake.reply.ok.%s@%s", trx.ID, trx.StageTopic)
 }
 
 func failureReplyAddress(trx *Transaction) string {
-	return fmt.Sprintf("failed/%s@%s", trx.ID, trx.StageTopic)
+	return fmt.Sprintf("sake.reply.fail.%s@%s", trx.ID, trx.StageTopic)
 }
